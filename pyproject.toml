@@ -15,8 +15,6 @@ classifiers = [
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -36,17 +34,27 @@ keywords = [
     "notification",
     "smtp",
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = ["exchangelib>=5.0.0", "urllib3>=2.0.0"]
 
 [project.optional-dependencies]
+yaml = ["pyyaml>=6.0"]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "pytest-console-scripts>=1.4.0",
+    "isort>=7.0.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
     "mypy>=1.0.0",
     "pre-commit>=3.0.0",
+]
+test = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "pytest-console-scripts>=1.4.0",
 ]
 docs = [
     "mkdocs>=1.6",
@@ -74,6 +82,7 @@ packages = ["exmailer"]
 
 [tool.uv]
 dev-dependencies = [
+    "isort>=7.0.0",
     "black>=23.0.0",
     "mypy>=1.0.0",
     "pre-commit>=3.0.0",
@@ -83,8 +92,6 @@ dev-dependencies = [
 ]
 
 [tool.uv.sources]
-
-
 
 
 [tool.black]
@@ -127,7 +134,7 @@ ignore = [
 "__init__.py" = ["F401"]
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
@@ -148,12 +155,14 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+markers = ["pytest-cov"]
+minversion = "7.2"
 addopts = [
     "--verbose",
-    "--cov=exchange_emailer",
-    "--cov-report=term-missing",
-    "--cov-report=html",
-    "--cov-report=xml",
+    "--cov=exmailer",
+    # "--cov-report=term-missing",
+    # "--cov-report=html",
+    # "--cov-report=xml",
 ]
 
 [tool.coverage.run]
@@ -170,85 +179,3 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "@abstractmethod",
 ]
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[project]
-name = "exmailer"
-version = "1.0.0"
-description = "Send emails via Microsoft Exchange Server with Persian/RTL support"
-readme = "README.md"
-authors = [{ name = "Sadegh Yazdani", email = "your.email@example.com" }]
-license = { text = "MIT" }
-classifiers = [
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Topic :: Communications :: Email",
-    "Topic :: Office/Business",
-]
-keywords = ["exchange", "email", "microsoft", "persian", "rtl"]
-requires-python = ">=3.8"
-dependencies = [
-    "exchangelib>=5.0.0",
-    "urllib3>=2.0.0",
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-    "black>=23.0.0",
-    "ruff>=0.1.0",
-    "mypy>=1.0.0",
-]
-docs = [
-    "mkdocs>=1.5.0",
-    "mkdocs-material>=9.5.0",
-    "mkdocstrings[python]>=0.24.0",
-]
-
-[project.urls]
-Homepage = "https://github.com/aerosadegh/exmailer"
-Documentation = "https://exmailer.readthedocs.io"
-Repository = "https://github.com/aerosadegh/exmailer"
-Issues = "https://github.com/aerosadegh/exmailer/issues"
-
-
