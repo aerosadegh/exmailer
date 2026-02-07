@@ -89,10 +89,8 @@ class ExchangeEmailer:
             emailer = ExchangeEmailer()
         """
         self.verbose = verbose
-        # Load config with layered priority
         self.config = load_config(config_path=config_path, config_dict=config)
 
-        # Setup logging
         if verbose:
             logging.basicConfig(
                 level=logging.DEBUG,
@@ -100,10 +98,6 @@ class ExchangeEmailer:
                 filename="exchange_debug.log",
             )
 
-        # Configure SSL context
-        # self._configure_ssl()
-
-        # Connect to Exchange server
         self.account = self._connect_to_exchange()
 
     def _create_ssl_context(self) -> ssl.SSLContext:
@@ -117,44 +111,18 @@ class ExchangeEmailer:
             logger.warning(f"⚠️ SSL configuration failed: {str(e)}")
             return ssl._create_unverified_context()
 
-    def _configure_ssl(self) -> None:
-        """Configure secure SSL context for Exchange connection."""
-        try:
-            # Create a custom SSL context that uses system certificates
-            ssl_ctx = create_urllib3_context()
-            ssl_ctx.load_default_certs()
-
-            # Configure exchangelib to use our secure context
-            class SecureAdapter(BaseProtocol.HTTP_ADAPTER_CLS):
-                ssl_context = ssl_ctx
-
-            BaseProtocol.HTTP_ADAPTER_CLS = SecureAdapter
-            logger.info("✅ SSL configured with system certificates")
-
-        except Exception as e:
-            logger.warning(f"⚠️ SSL configuration warning: {str(e)}")
-            logger.warning("Falling back to certificate verification with warnings")
-            import urllib3
-
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
     def _connect_to_exchange(self):
         """Connect to Exchange server with provided credentials."""
         try:
-            # Create credentials in DOMAIN\username format
             full_username = f"{self.config['domain']}\\{self.config['username']}"
             credentials = Credentials(username=full_username, password=self.config["password"])
-
-            # Configure Exchange version (Exchange 2016 CU22+)
             version = Version(build=Build(15, 1, 2248, 0))
 
-            # Get email domain from config or construct it
             email_domain = self.config.get("email_domain")
             if email_domain is None:
-                raise ValueError("`email_domain` must configured!")
+                raise ValueError("`email_domain` must be configured!")
             primary_email = f"{self.config['username']}@{email_domain}"
 
-            # Create configuration
             config = Configuration(
                 service_endpoint=f"https://{self.config['server']}/EWS/Exchange.asmx",
                 credentials=credentials,
@@ -162,7 +130,6 @@ class ExchangeEmailer:
                 version=version,
             )
 
-            # Connect to account
             account = Account(
                 primary_smtp_address=primary_email,
                 config=config,
@@ -170,10 +137,10 @@ class ExchangeEmailer:
                 access_type=DELEGATE,
             )
 
+            # Inject Secure Adapter directly into this account's session
             if account.protocol:
                 ssl_context = self._create_ssl_context()
                 adapter = SecureHTTPAdapter(ssl_context=ssl_context)
-                # Mount the adapter to the account's session for HTTPS requests
                 account.protocol.session.mount("https://", adapter)
 
             if self.verbose:

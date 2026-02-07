@@ -5,19 +5,11 @@ import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional
+import yaml
 
 from .exceptions import ConfigurationError
 
 logger = logging.getLogger(__name__)
-
-# Standard config file locations (searched in order)
-DEFAULT_CONFIG_PATHS = [
-    Path.cwd() / "exmailer.json",
-    Path.cwd() / "exmailer.yaml",
-    Path.home() / ".config" / "exmailer" / "config.json",
-    Path.home() / ".exmailer.json",
-    Path.home() / ".exmailer.yaml",
-]
 
 
 def load_config(
@@ -26,55 +18,48 @@ def load_config(
     use_env: bool = True,
 ) -> Dict[str, Any]:
     """
-    Load configuration with layered priority:
-    1. config_dict (programmatic - highest priority)
-    2. config_path (explicit file path)
-    3. DEFAULT_CONFIG_PATHS (implicit file discovery)
-    4. Environment variables (if use_env=True)
-    5. Safe defaults (non-sensitive values only)
-
-    Args:
-        config_path: Explicit path to config file (JSON/YAML)
-        config_dict: Direct configuration dictionary
-        use_env: Whether to fall back to environment variables
-
-    Returns:
-        Validated configuration dictionary
-
-    Raises:
-        ConfigurationError: If required fields are missing after all sources exhausted
+    Load configuration with layered priority.
     """
     config: Dict[str, Any] = {}
 
-    # Layer 1: Programmatic config (highest priority)
-    if config_dict:
-        config.update(_normalize_config(config_dict))
-        logger.debug("✓ Loaded configuration from programmatic dict")
-
-    # Layer 2: Explicit config file
+    # Layer 3 & 2: Config Files
     if config_path:
+        # Explicit file
         file_config = _load_config_file(config_path)
         config.update(_normalize_config(file_config))
         logger.info(f"✓ Loaded configuration from {config_path}")
 
-    # Layer 3: Implicit config file discovery (only if no explicit sources yet)
-    elif not config_dict and not config_path:
-        for path in DEFAULT_CONFIG_PATHS:
+    elif not config_dict:
+        # Implicit discovery
+        # MOVED HERE: Define paths dynamically to respect os.chdir()
+        default_paths = [
+            Path.cwd() / "exmailer.json",
+            Path.cwd() / "exmailer.yaml",
+            Path.home() / ".config" / "exmailer" / "config.json",
+            Path.home() / ".exmailer.json",
+            Path.home() / ".exmailer.yaml",
+        ]
+
+        for path in default_paths:
             if path.exists():
                 file_config = _load_config_file(str(path))
                 config.update(_normalize_config(file_config))
                 logger.info(f"✓ Loaded configuration from discovered file: {path}")
                 break
 
-    # Layer 4: Environment variables (optional fallback)
+    # Layer 1: Programmatic config (Highest priority)
+    if config_dict:
+        config.update(_normalize_config(config_dict))
+        logger.debug("✓ Loaded configuration from programmatic dict")
+
+    # Layer 4: Environment variables
     if use_env:
         env_config = _load_env_config()
-        # Only merge values not already set (lower priority)
         for key, value in env_config.items():
             if key not in config or config[key] is None:
                 config[key] = value
 
-    # Layer 5: Safe defaults (non-sensitive only)
+    # Layer 5: Safe defaults
     defaults = {
         "auth_type": "NTLM",
         "save_copy": True,
@@ -102,20 +87,18 @@ def _load_config_file(path: str) -> Dict[str, Any]:
 
                 with open(path_obj, "r", encoding="utf-8") as f:
                     content = f.read()
-                    # Handle empty files
                     if not content.strip():
                         return {}
                     return yaml.safe_load(content) or {}
             except ImportError:
                 raise ConfigurationError(
-                    "YAML support requires 'pyyaml' package. " "Install with: pip install pyyaml"
+                    "YAML support requires 'pyyaml' package. Install with: pip install pyyaml"
                 )
             except Exception as e:
                 raise ConfigurationError(f"Invalid YAML in {path}: {e}")
         else:  # JSON (default)
             with open(path_obj, "r", encoding="utf-8") as f:
                 content = f.read()
-                # Handle empty files
                 if not content.strip():
                     return {}
                 return json.loads(content)
@@ -127,13 +110,12 @@ def _load_config_file(path: str) -> Dict[str, Any]:
 
 def _load_env_config() -> Dict[str, Any]:
     """Load configuration from environment variables."""
-    # Optional: Load .env file if python-dotenv available
     try:
         from dotenv import load_dotenv
 
         load_dotenv()
     except ImportError:
-        pass  # .env support is optional
+        pass
 
     return {
         "domain": os.getenv("EXCHANGE_DOMAIN"),
@@ -156,7 +138,7 @@ def _parse_bool_env(var_name: str) -> Optional[bool]:
         return True
     if value_lower in ("false", "0", "no", "off", "n"):
         return False
-    return None  # Invalid value - will be handled by validation
+    return None
 
 
 def _normalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -166,7 +148,6 @@ def _normalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
 
     normalized = {}
     key_mapping = {
-        # Support common aliases
         "domain": ["domain", "exchange_domain", "ad_domain"],
         "username": ["username", "user", "exchange_user"],
         "password": ["password", "pass", "exchange_pass"],
@@ -182,7 +163,6 @@ def _normalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
                 normalized[std_key] = config[alias]
                 break
 
-    # Normalize boolean values
     if "save_copy" in normalized:
         val = normalized["save_copy"]
         if isinstance(val, str):
@@ -196,7 +176,13 @@ def _normalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
 def _validate_required_fields(config: Dict[str, Any]) -> None:
     """Validate that all required fields are present and non-empty."""
     required_fields = ["domain", "username", "password", "server", "email_domain"]
-    missing = [field for field in required_fields if not config.get(field)]
+    missing = []
+
+    for field in required_fields:
+        val = config.get(field)
+        # Check for None or empty string or whitespace-only string
+        if not val or (isinstance(val, str) and not val.strip()):
+            missing.append(field)
 
     if missing:
         example_config = {
@@ -219,7 +205,6 @@ def _validate_required_fields(config: Dict[str, Any]) -> None:
             f"Example config.json:\n{json.dumps(example_config, indent=2, ensure_ascii=False)}"
         )
 
-    # Validate auth_type
     valid_auth_types = ["NTLM", "BASIC"]
     if config["auth_type"] and config["auth_type"].upper() not in valid_auth_types:
         raise ConfigurationError(
