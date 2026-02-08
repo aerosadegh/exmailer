@@ -1,0 +1,102 @@
+name: Publish to PyPI
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*.*"  # Triggers only on version tags, e.g., v1.0.0
+
+permissions:
+  contents: read
+
+jobs:
+  # ------------------------------------------------------------------
+  # JOB 1: QUALITY ASSURANCE
+  # strictly enforces that tests pass before any build occurs.
+  # ------------------------------------------------------------------
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install Project & Dependencies
+        run: |
+          uv sync --all-extras --dev
+
+      - name: Run Pytest
+        # We use 'uv run' to execute within the isolated environment
+        run: uv run pytest
+
+  # ------------------------------------------------------------------
+  # JOB 2: BUILD ARTIFACTS
+  # Creates the .whl and .tar.gz files
+  # ------------------------------------------------------------------
+  build:
+    name: Build Distribution
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/') # Only run on tags
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Build Frontend
+        run: python -m pip install build
+
+      - name: Build Binary (Wheel) and Source (sDist)
+        run: python -m build
+
+      - name: Verify Artifacts
+        run: ls -l dist/
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+  # ------------------------------------------------------------------
+  # JOB 3: PUBLISH TO PYPI
+  # Uploads the built artifacts to the package registry
+  # ------------------------------------------------------------------
+  publish:
+    name: Upload to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/exmailer
+    permissions:
+      id-token: write  # MANDATORY for Trusted Publishing
+
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
