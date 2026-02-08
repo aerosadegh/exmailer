@@ -5,16 +5,15 @@ on:
     branches:
       - main
     tags:
-      - "v[0-9]+.[0-9]+.[0-9]+*"  # Triggers only on version tags, e.g., v1.0.0
+      - "v[0-9]+.[0-9]+.[0-9]+*"  # Triggers on branches AND version tags
 
 permissions:
-  contents: write
-  id-token: write
+  contents: write  # Required for GitHub Releases
+  id-token: write  # Required for PyPI trusted publishing
 
 jobs:
   # ------------------------------------------------------------------
-  # JOB 1: QUALITY ASSURANCE
-  # strictly enforces that tests pass before any build occurs.
+  # JOB 1: QUALITY ASSURANCE (runs on branches AND tags)
   # ------------------------------------------------------------------
   test:
     name: Run Tests
@@ -36,31 +35,30 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install Project & Dependencies
-        run: |
-          uv sync --all-extras --dev
+        run: uv sync --all-extras --dev
 
       - name: Run Pytest
         run: uv run pytest
 
-      - name: Run Debugs
+      # ✅ SAFE debug output (never fails the job)
+      - name: Debug Event Info
         run: |
-          echo "❓ BUILD JOB TRIGGERED FOR TAG"
           echo "ref: ${{ github.ref }}"
           echo "ref_type: ${{ github.ref_type }}"
           echo "ref_name: ${{ github.ref_name }}"
-          [[ "${{ github.ref_type }}" == "tag" ]] || { echo "❌ NOT A TAG EVENT - SKIPPING"; exit 1; }
-
-      - name: Verify version consistency
-        run: python -c "from exmailer import __version__; assert __version__ != '0.0.0-dev'"
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "✅ TAG EVENT - Will trigger build/publish"
+          else
+            echo "ℹ️ BRANCH EVENT - Skipping build/publish"
+          fi
 
   # ------------------------------------------------------------------
-  # JOB 2: BUILD ARTIFACTS
-  # Creates the .whl and .tar.gz files
+  # JOB 2: BUILD ARTIFACTS (ONLY on tags)
   # ------------------------------------------------------------------
   build:
     name: Build Distribution
     needs: test
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag'  # ONLY run on actual tag pushes
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -73,55 +71,42 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install Build Frontend
-        run: python -m pip install build
+      - name: Install Build Tools
+        run: pip install build hatchling
 
-      - name: Build Binary (Wheel) and Source (sDist)
+      - name: Build Distributions
         run: python -m build
 
       - name: Verify Artifacts
-        run: ls -l dist/
+        run: ls -lh dist/
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: python-package-distributions
           path: dist/
+          retention-days: 7
 
-
-  # ------------------------------------------------------------------
-  # JOB 3: PUBLISH TO PYPI
-  # Uploads the built artifacts to the package registry
-  # ------------------------------------------------------------------
-  publish:
-    name: Upload to PyPI
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/exmailer
-    steps:
-      - name: Download Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: python-package-distributions
-          path: dist/
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+      # ✅ Version verification ONLY on tags (safe!)
+      - name: Verify Version Consistency
+        run: |
+          # Install package to verify __version__
+          pip install dist/*.whl
+          python -c "from exmailer import __version__; print(f'Version: {__version__}'); assert __version__ != '0.0.0-dev', 'Version is dev build!'"
 
   # ------------------------------------------------------------------
-  # JOB 4: CREATE GITHUB RELEASE
+  # JOB 3: CREATE GITHUB RELEASE (ONLY on tags)
   # ------------------------------------------------------------------
   create-release:
     name: Create GitHub Release
-    needs: build-and-test
+    needs: build  # ✅ FIXED: depends on actual 'build' job
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Get full history for changelog
+          fetch-depth: 0  # Required for changelog generation
 
       - name: Download Artifacts
         uses: actions/download-artifact@v4
@@ -132,7 +117,6 @@ jobs:
       - name: Generate Changelog
         id: changelog
         run: |
-          # Get previous tag (if exists)
           PREV_TAG=$(git describe --tags --abbrev=0 --exclude "$(git tag --points-at HEAD)" 2>/dev/null || echo "")
 
           if [ -z "$PREV_TAG" ]; then
@@ -142,17 +126,15 @@ jobs:
             echo "First stable release of ExMailer." >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
           else
-            # Generate changelog from commits since last tag
             echo "body<<EOF" >> $GITHUB_OUTPUT
             echo "# 📦 Version ${{ github.ref_name }}" >> $GITHUB_OUTPUT
             echo "" >> $GITHUB_OUTPUT
             echo "## ✨ Changes since $PREV_TAG" >> $GITHUB_OUTPUT
             echo "" >> $GITHUB_OUTPUT
 
-            # Group commits by type (conventional commits)
             git log $PREV_TAG..HEAD --pretty=format:"- %s" --reverse | \
               grep -E "^(feat|fix|chore|docs|refactor|perf)" | \
-              sed -E 's/^(feat.*)/✨ \1/; s/^(fix.*)/🐛 \1/; s/^(docs.*)/📚 \1/; s/^(chore.*)/🔧 \1/; s/^(refactor.*)/♻️ \1/; s/^(perf.*)/⚡ \1/' >> $GITHUB_OUTPUT
+              sed -E 's/^(feat.*)/✨ \1/; s/^(fix.*)/🐛 \1/; s/^(docs.*)/📚 \1/; s/^(chore.*)/🔧 \1/; s/^(refactor.*)/♻️ \1/; s/^(perf.*)/⚡ \1/' || echo "- Various improvements" >> $GITHUB_OUTPUT
 
             echo "" >> $GITHUB_OUTPUT
             echo "## 📦 Installation" >> $GITHUB_OUTPUT
@@ -176,3 +158,24 @@ jobs:
             dist/*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ------------------------------------------------------------------
+  # JOB 4: PUBLISH TO PYPI (ONLY on tags)
+  # ------------------------------------------------------------------
+  publish:
+    name: Publish to PyPI
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/exmailer
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
