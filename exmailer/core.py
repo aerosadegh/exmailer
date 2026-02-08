@@ -239,6 +239,7 @@ class ExchangeEmailer:
         """
         try:
             # Get the appropriate template
+            ## Apply template variables if provided
             template_vars = template_vars or {}
             template_vars["body"] = body.format(**template_vars)
 
@@ -248,10 +249,6 @@ class ExchangeEmailer:
             else:
                 # Get template (handles both TemplateType enum and string names)
                 template_html = get_template(template)
-
-                # Apply template variables if provided
-                template_vars = template_vars or {}
-                template_vars["body"] = body
 
                 # Format body with template
                 formatted_body = template_html.format(**template_vars)
@@ -304,20 +301,20 @@ class ExchangeEmailer:
                 raise SendError(f"Failed to send email: {str(e)}") from e  # ← Wrap exception
 
             logger.info(f"✅ Email sent successfully to {', '.join(recipients)}")
-            if self.verbose: # pragma: no cover
+            if self.verbose:  # pragma: no cover
                 print(f"✅ Email sent successfully to {', '.join(recipients)}")
 
             return True
 
         except Exception as e:
             logger.error(f"❌ Failed to send email: {str(e)}")
-            if self.verbose: # pragma: no cover
+            if self.verbose:  # pragma: no cover
                 print(f"❌ Failed to send email: {str(e)}")
             raise
 
-    def __enter__(self): # pragma: no cover
+    def __enter__(self):  # pragma: no cover
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb): # pragma: no cover
+    def __exit__(self, exc_type, exc_val, exc_tb):  # pragma: no cover
         # Cleanup resources if needed
         pass
