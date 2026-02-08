@@ -4,8 +4,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
-import yaml
+from typing import Any
 
 from .exceptions import ConfigurationError
 
@@ -13,14 +12,14 @@ logger = logging.getLogger(__name__)
 
 
 def load_config(
-    config_path: Optional[str] = None,
-    config_dict: Optional[Dict[str, Any]] = None,
+    config_path: str | None = None,
+    config_dict: dict[str, Any] | None = None,
     use_env: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Load configuration with layered priority.
     """
-    config: Dict[str, Any] = {}
+    config: dict[str, Any] = {}
 
     # Layer 3 & 2: Config Files
     if config_path:
@@ -73,7 +72,7 @@ def load_config(
     return config
 
 
-def _load_config_file(path: str) -> Dict[str, Any]:
+def _load_config_file(path: str) -> dict[str, Any] | Any:
     """Load configuration from JSON or YAML file."""
     path_obj = Path(path).expanduser().resolve()
 
@@ -85,30 +84,30 @@ def _load_config_file(path: str) -> Dict[str, Any]:
             try:
                 import yaml
 
-                with open(path_obj, "r", encoding="utf-8") as f:
+                with open(path_obj, encoding="utf-8") as f:
                     content = f.read()
                     if not content.strip():
                         return {}
                     return yaml.safe_load(content) or {}
             except ImportError:
-                raise ConfigurationError(
+                raise ConfigurationError(  # noqa: B904
                     "YAML support requires 'pyyaml' package. Install with: pip install pyyaml"
                 )
             except Exception as e:
-                raise ConfigurationError(f"Invalid YAML in {path}: {e}")
+                raise ConfigurationError(f"Invalid YAML in {path}: {e}")  # noqa: B904
         else:  # JSON (default)
-            with open(path_obj, "r", encoding="utf-8") as f:
+            with open(path_obj, encoding="utf-8") as f:
                 content = f.read()
                 if not content.strip():
                     return {}
                 return json.loads(content)
     except json.JSONDecodeError as e:
-        raise ConfigurationError(f"Invalid JSON in {path}: {e}")
+        raise ConfigurationError(f"Invalid JSON in {path}: {e}")  # noqa: B904
     except Exception as e:
-        raise ConfigurationError(f"Failed to parse config file {path}: {e}")
+        raise ConfigurationError(f"Failed to parse config file {path}: {e}")  # noqa: B904
 
 
-def _load_env_config() -> Dict[str, Any]:
+def _load_env_config() -> dict[str, Any]:
     """Load configuration from environment variables."""
     try:
         from dotenv import load_dotenv
@@ -128,7 +127,7 @@ def _load_env_config() -> Dict[str, Any]:
     }
 
 
-def _parse_bool_env(var_name: str) -> Optional[bool]:
+def _parse_bool_env(var_name: str) -> bool | None:
     """Parse boolean environment variable."""
     value = os.getenv(var_name)
     if value is None:
@@ -141,7 +140,7 @@ def _parse_bool_env(var_name: str) -> Optional[bool]:
     return None
 
 
-def _normalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
+def _normalize_config(config: dict[str, Any]) -> dict[str, Any]:
     """Normalize config keys to standard names and types."""
     if not isinstance(config, dict):
         raise ConfigurationError(f"Invalid configuration: expected dict, got {type(config)}")
@@ -173,7 +172,7 @@ def _normalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
-def _validate_required_fields(config: Dict[str, Any]) -> None:
+def _validate_required_fields(config: dict[str, Any]) -> None:
     """Validate that all required fields are present and non-empty."""
     required_fields = ["domain", "username", "password", "server", "email_domain"]
     missing = []

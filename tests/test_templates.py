@@ -1,7 +1,5 @@
 """Tests for email template system."""
 
-import re
-
 import pytest
 
 from exmailer.templates import (
@@ -126,14 +124,14 @@ def test_template_variable_substitution():
     from exmailer.core import ExchangeEmailer
 
     # Mock the entire Exchange connection
-    with patch("exmailer.core.ExchangeEmailer._connect_to_exchange") as mock_connect, patch(
-        "exmailer.core.ExchangeEmailer._create_ssl_context"
+    with (
+        patch("exmailer.core.ExchangeEmailer._connect_to_exchange") as mock_connect,
+        patch("exmailer.core.ExchangeEmailer._create_ssl_context"),
     ):
-
         mock_account = MagicMock()
         mock_connect.return_value = mock_account
 
-        emailer = ExchangeEmailer(
+        ExchangeEmailer(
             config={
                 "domain": "test",
                 "username": "user",

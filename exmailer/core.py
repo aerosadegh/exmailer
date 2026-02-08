@@ -3,7 +3,7 @@
 import logging
 import ssl
 from collections.abc import Sequence
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal
 
 from exchangelib import (
     DELEGATE,
@@ -121,8 +121,9 @@ class ExchangeEmailer:
             logger.info("✅ SSL configured with system certificates")
             return ctx
         except Exception as e:  # pragma: no cover
-            logger.warning(f"⚠️ SSL configuration failed: {str(e)}")
-            return ssl._create_unverified_context()
+            logger.warning(f"⚠️ SSL configuration failed: {e!s}")
+            # noqa S323 - intentional fallback for connectivity resilience
+            return ssl._create_unverified_context()  # noqa: S323
 
     def _connect_to_exchange(self):
         """Connect to Exchange server with provided credentials."""
@@ -165,11 +166,11 @@ class ExchangeEmailer:
             return account
 
         except UnauthorizedError as e:
-            raise AuthenticationError(f"Authentication failed: {str(e)}") from e
+            raise AuthenticationError(f"Authentication failed: {e!s}") from e
         except TransportError as e:
-            raise ExchangeEmailConnectionError(f"Connection failed: {str(e)}") from e
+            raise ExchangeEmailConnectionError(f"Connection failed: {e!s}") from e
         except Exception as e:  # pragma: no cover
-            raise ExchangeEmailConnectionError(f"Unexpected connection error: {str(e)}") from e
+            raise ExchangeEmailConnectionError(f"Unexpected connection error: {e!s}") from e
 
     def send_email(
         self,
@@ -179,7 +180,7 @@ class ExchangeEmailer:
         attachments: Sequence[str] | None = None,
         cc_recipients: Sequence[str] | None = None,
         bcc_recipients: Sequence[str] | None = None,
-        template: Optional[Union[str, TemplateType]] = TemplateType.PERSIAN,
+        template: str | TemplateType | None = TemplateType.PERSIAN,
         template_vars: dict[str, Any] | None = None,
         importance: Literal["Low", "Normal", "High"] = "Normal",
     ) -> bool:
@@ -289,16 +290,16 @@ class ExchangeEmailer:
                         )
 
                     except Exception as e:  # pragma: no cover
-                        logger.error(f"Failed to attach {attachment['path']}: {str(e)}")
+                        logger.error(f"Failed to attach {attachment['path']}: {e!s}")
                         if self.verbose:
-                            print(f"⚠️ Failed to attach {attachment['path']}: {str(e)}")
+                            print(f"⚠️ Failed to attach {attachment['path']}: {e!s}")
 
             # Send email
             save_copy = self.config.get("save_copy", True)
             try:
                 msg.send(save_copy=save_copy)
             except Exception as e:
-                raise SendError(f"Failed to send email: {str(e)}") from e  # ← Wrap exception
+                raise SendError(f"Failed to send email: {e!s}") from e  # ← Wrap exception
 
             logger.info(f"✅ Email sent successfully to {', '.join(recipients)}")
             if self.verbose:  # pragma: no cover
@@ -307,9 +308,9 @@ class ExchangeEmailer:
             return True
 
         except Exception as e:
-            logger.error(f"❌ Failed to send email: {str(e)}")
+            logger.error(f"❌ Failed to send email: {e!s}")
             if self.verbose:  # pragma: no cover
-                print(f"❌ Failed to send email: {str(e)}")
+                print(f"❌ Failed to send email: {e!s}")
             raise
 
     def __enter__(self):  # pragma: no cover

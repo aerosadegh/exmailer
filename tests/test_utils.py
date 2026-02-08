@@ -1,9 +1,6 @@
 """Tests for utility functions (attachments, MIME types)."""
 
-import os
 from pathlib import Path
-
-import pytest
 
 from exmailer.utils import get_content_type, validate_attachments
 
@@ -90,7 +87,6 @@ def test_validate_attachments_tilde_expansion():
     """Test that ~ paths are expanded correctly."""
     # We can't test actual home directory expansion reliably in tests,
     # but we can verify the function handles Path objects correctly
-    from pathlib import Path
 
     # Mock a home directory path
     fake_home = Path("/fake/home/user")

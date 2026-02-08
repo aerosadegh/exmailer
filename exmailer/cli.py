@@ -69,7 +69,7 @@ def main():
             with open(file_path, encoding="utf-8") as f:
                 body_content = f.read()
         except Exception as e:
-            print(f"❌ Error reading body file: {str(e)}")
+            print(f"❌ Error reading body file: {e!s}")
             sys.exit(1)
 
     # Get attachments with expanded paths
@@ -111,10 +111,10 @@ def main():
                 sys.exit(1)
 
     except ExchangeEmailerError as e:
-        print(f"❌ {str(e)}")
+        print(f"❌ {e!s}")
         sys.exit(1)
     except Exception as e:
-        print(f"❌ Unexpected error: {str(e)}")
+        print(f"❌ Unexpected error: {e!s}")
         sys.exit(1)
 
 

@@ -3,9 +3,9 @@
 import json
 import os
 from unittest.mock import MagicMock, patch
+
 import pytest
 from exchangelib import Account, Configuration, Credentials
-from exmailer.core import ExchangeEmailer
 
 
 @pytest.fixture(autouse=True)
@@ -23,10 +23,10 @@ def clean_environment():
 @pytest.fixture(autouse=True)
 def mock_ssl_and_adapter():
     """Globally mock SSL context creation and SecureHTTPAdapter."""
-    with patch("exmailer.core.ssl.create_default_context") as mock_ssl, patch(
-        "exmailer.core.SecureHTTPAdapter"
-    ) as mock_adapter:
-
+    with (
+        patch("exmailer.core.ssl.create_default_context") as mock_ssl,
+        patch("exmailer.core.SecureHTTPAdapter") as mock_adapter,
+    ):
         mock_ctx = MagicMock()
         mock_ssl.return_value = mock_ctx
         mock_adapter_instance = MagicMock()
@@ -53,14 +53,12 @@ def mock_exchange_account():
 @pytest.fixture
 def mock_exchange_connection(mock_exchange_account):
     """Mock the entire Exchange connection process, including the Message class."""
-    with patch("exmailer.core.Credentials", spec=Credentials) as mock_creds, patch(
-        "exmailer.core.Configuration", spec=Configuration
-    ) as mock_config, patch(
-        "exmailer.core.Account", return_value=mock_exchange_account
-    ) as mock_account_cls, patch(
-        "exmailer.core.Message"
-    ) as mock_message_cls:  # <--- NEW: Mock Message class
-
+    with (
+        patch("exmailer.core.Credentials", spec=Credentials) as mock_creds,
+        patch("exmailer.core.Configuration", spec=Configuration) as mock_config,
+        patch("exmailer.core.Account", return_value=mock_exchange_account) as mock_account_cls,
+        patch("exmailer.core.Message") as mock_message_cls,
+    ):  # <--- NEW: Mock Message class
         mock_creds.return_value = MagicMock()
         mock_config.return_value = MagicMock()
 

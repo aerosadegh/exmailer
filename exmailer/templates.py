@@ -1,8 +1,6 @@
 """HTML email templates with flexible template management."""
 
 from enum import StrEnum
-from textwrap import dedent
-
 
 # def get_persian_template() -> str:
 #     """Get default RTL Persian HTML template with proper fonts and styling."""

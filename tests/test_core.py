@@ -1,6 +1,7 @@
 """Tests for core ExchangeEmailer functionality (with mocked Exchange server)."""
 
 import ssl
+
 import pytest
 from exchangelib.protocol import BaseProtocol
 

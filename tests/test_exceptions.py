@@ -1,7 +1,5 @@
 """Tests for custom exception handling."""
 
-import pytest
-
 from exmailer.exceptions import (
     AttachmentError,
     AuthenticationError,
