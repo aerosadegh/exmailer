@@ -15,6 +15,9 @@ repos:
       - id: fix-byte-order-marker
       - id: mixed-line-ending
         args: ["--fix=lf"]
+      # Prevent non-semver tags
+      - id: no-commit-to-branch
+        args: [--branch, main, --pattern, '^v\d+\.\d+\.\d+.*$']
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.6.9
@@ -45,6 +48,8 @@ repos:
           - types-requests
           - types-PyYAML
           - pytest
+
+
 
   - repo: https://github.com/commitizen-tools/commitizen
     rev: v3.29.0
