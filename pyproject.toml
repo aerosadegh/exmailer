@@ -15,7 +15,6 @@ classifiers = [
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -34,7 +33,7 @@ keywords = [
     "notification",
     "smtp",
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = ["exchangelib>=5.0.0", "urllib3>=2.0.0"]
 
 [project.optional-dependencies]
@@ -134,7 +133,7 @@ ignore = [
 "__init__.py" = ["F401"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
