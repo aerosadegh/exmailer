@@ -24,7 +24,6 @@
 - **Logging Support**: Verbose mode for debugging and troubleshooting
 
 ## Installation
-
 Requires Python 3.11+
 
 ```bash
