@@ -1,8 +1,11 @@
 """Tests for core ExchangeEmailer functionality (with mocked Exchange server)."""
 
 from unittest.mock import MagicMock, patch
+
 import pytest
-from exmailer.core import ExchangeEmailer
+from exchangelib.protocol import BaseProtocol
+
+from exmailer.core import ExchangeEmailer, SecureHTTPAdapter
 from exmailer.exceptions import AuthenticationError, ExchangeEmailConnectionError, SendError
 from exmailer.templates import TemplateType
 
@@ -11,18 +14,15 @@ def test_init_with_programmatic_config(mock_exchange_connection, sample_config):
     """Test initializing with programmatic config dict."""
     emailer = ExchangeEmailer(config=sample_config)
 
-    # Verify config was set correctly
     assert emailer.config["domain"] == "company"
     assert emailer.config["username"] == "john.doe"
 
-    # Verify connection was attempted
     assert mock_exchange_connection["account"].called
 
-    # Verify SSL Adapter was mounted
-    mock_account = mock_exchange_connection["mock_account"]
-    assert mock_account.protocol.session.mount.called
-    args, _ = mock_account.protocol.session.mount.call_args
-    assert args[0] == "https://"
+    # Compare against the patched adapter in exmailer.core
+    import exmailer.core as core_module
+
+    assert BaseProtocol.HTTP_ADAPTER_CLS is core_module.SecureHTTPAdapter
 
 
 def test_init_with_config_file(mock_exchange_connection, config_file):
