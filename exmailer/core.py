@@ -21,7 +21,6 @@ from exchangelib.errors import TransportError, UnauthorizedError
 from exchangelib.protocol import BaseProtocol
 from requests.adapters import HTTPAdapter
 from urllib3.poolmanager import PoolManager
-from urllib3.util.ssl_ import create_urllib3_context
 
 from .config import load_config
 from .exceptions import (
@@ -29,7 +28,7 @@ from .exceptions import (
     ExchangeEmailConnectionError,
     SendError,
 )
-from .templates import TemplateType, get_template, register_custom_template
+from .templates import TemplateType, get_template
 from .utils import validate_attachments
 
 logger = logging.getLogger(__name__)
@@ -37,21 +36,25 @@ logger = logging.getLogger(__name__)
 
 class SecureHTTPAdapter(HTTPAdapter):
     """
-    Custom HTTP Adapter that allows injecting a specific SSL context.
-    This ensures we use system certs without patching exchangelib globally.
+    Custom HTTP Adapter that injects a secure SSL context.
+    Compatible with exchangelib which instantiates adapters without args.
     """
 
-    def __init__(self, ssl_context: ssl.SSLContext, **kwargs):
+    def __init__(self, ssl_context: ssl.SSLContext | None = None, **kwargs):
+        if ssl_context is None:
+            ssl_context = ssl.create_default_context()
+            ssl_context.load_default_certs()
+
         self.ssl_context = ssl_context
         super().__init__(**kwargs)
 
-    def init_poolmanager(self, connections, maxsize, block=False):
-        # Inject the custom SSL context into the pool manager
+    def init_poolmanager(self, connections, maxsize, block=False, **pool_kwargs):
         self.poolmanager = PoolManager(
             num_pools=connections,
             maxsize=maxsize,
             block=block,
             ssl_context=self.ssl_context,
+            **pool_kwargs,
         )
 
 
@@ -90,6 +93,7 @@ class ExchangeEmailer:
         """
         self.verbose = verbose
         self.config = load_config(config_path=config_path, config_dict=config)
+        self._patch_exchangelib_adapter()
 
         if verbose:
             logging.basicConfig(
@@ -99,6 +103,15 @@ class ExchangeEmailer:
             )
 
         self.account = self._connect_to_exchange()
+
+    def _patch_exchangelib_adapter(self):
+        """
+        Configure exchangelib to use our SecureHTTPAdapter.
+        This ensures all connections use system SSL certificates.
+        """
+        if BaseProtocol.HTTP_ADAPTER_CLS != SecureHTTPAdapter:
+            BaseProtocol.HTTP_ADAPTER_CLS = SecureHTTPAdapter
+            logger.debug("🔒 Patched exchangelib with SecureHTTPAdapter")
 
     def _create_ssl_context(self) -> ssl.SSLContext:
         """Create a secure SSL context using standard libraries."""
@@ -141,7 +154,10 @@ class ExchangeEmailer:
             if account.protocol:
                 ssl_context = self._create_ssl_context()
                 adapter = SecureHTTPAdapter(ssl_context=ssl_context)
-                account.protocol.session.mount("https://", adapter)
+
+                session = account.protocol.get_session()
+                session.mount("https://", adapter)
+                account.protocol.release_session(session)
 
             if self.verbose:
                 print("✅ Connected to Exchange Server")
@@ -223,20 +239,22 @@ class ExchangeEmailer:
         """
         try:
             # Get the appropriate template
+            template_vars = template_vars or {}
+            template_vars["body"] = body.format(**template_vars)
+
             if template is None or template == TemplateType.PLAIN:
                 # No template - use body as-is
-                formatted_body = body
+                formatted_body = body.format(**template_vars)
             else:
                 # Get template (handles both TemplateType enum and string names)
                 template_html = get_template(template)
 
                 # Apply template variables if provided
-                if template_vars:
-                    for key, value in template_vars.items():
-                        body = body.replace(f"{{{key}}}", str(value))
+                template_vars = template_vars or {}
+                template_vars["body"] = body
 
                 # Format body with template
-                formatted_body = template_html.replace("{body}", body)
+                formatted_body = template_html.format(**template_vars)
 
             # Create message
             msg = Message(
