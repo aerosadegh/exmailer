@@ -22,7 +22,6 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -40,18 +39,21 @@ jobs:
           uv sync --all-extras --dev
 
       - name: Run Pytest
-        # We use 'uv run' to execute within the isolated environment
         run: uv run pytest
 
   debug:
-  runs-on: ubuntu-latest
-  needs: test
-  if: always()
-  steps:
-    - run: |
-        echo "ref: ${{ github.ref }}"
-        echo "ref_type: ${{ github.ref_type }}"
-        echo "ref_name: ${{ github.ref_name }}"
+    runs-on: ubuntu-latest
+    needs: test
+    if: always()
+    steps:
+      - run: |
+          echo "ref: ${{ github.ref }}"
+          echo "ref_type: ${{ github.ref_type }}"
+          echo "ref_name: ${{ github.ref_name }}"
+
+      - name: Verify version consistency
+        run: |
+          python -c "from exmailer import __version__; assert __version__ != '0.0.0-dev'"
 
   # ------------------------------------------------------------------
   # JOB 2: BUILD ARTIFACTS
@@ -62,7 +64,6 @@ jobs:
     needs: test
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -102,7 +103,6 @@ jobs:
       url: https://pypi.org/p/exmailer
     permissions:
       id-token: write  # MANDATORY for Trusted Publishing
-
     steps:
       - name: Download Artifacts
         uses: actions/download-artifact@v4

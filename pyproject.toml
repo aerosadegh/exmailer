@@ -2,6 +2,9 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.version]
+path = "exmailer/__init__.py"
+
 [project]
 name = "exmailer"
 version = "1.0.2"
