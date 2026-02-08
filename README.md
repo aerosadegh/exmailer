@@ -122,7 +122,7 @@ Or use a JSON config file `exmailer.json`:
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.11+
 - Microsoft Exchange Server access
 - Valid domain credentials
 
