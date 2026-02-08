@@ -25,7 +25,7 @@
 
 ## Installation
 
-Requires Python 3.10+
+Requires Python 3.11+
 
 ```bash
 pip install exmailer
