@@ -34,7 +34,7 @@ with ExchangeEmailer() as emailer:
     )
 ```
 
-### Using CLI
+### Using CLI (Under Construction)
 
 ```bash
 python -m exchange_emailer \
@@ -72,7 +72,7 @@ Or use a JSON config file:
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.10+
 - Microsoft Exchange Server access
 - Valid domain credentials
 
