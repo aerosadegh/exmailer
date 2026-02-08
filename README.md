@@ -25,11 +25,9 @@
 
 ## Installation
 Requires Python 3.11+
-
 ```bash
 pip install exmailer
 ```
-
 
 ## Quick Start
 
@@ -96,7 +94,6 @@ python -m exchange_emailer \
 ExMailer looks for `exmailer.json` or `exmailer.yaml` in your current directory or `~/.config/exmailer/`.
 
 Set environment variables `.env`:
-
 ```bash
 EXCHANGE_DOMAIN="CORP"
 EXCHANGE_USER="jdoe"
@@ -107,7 +104,6 @@ EXCHANGE_AUTH_TYPE="NTLM" # or BASIC
 ```
 
 Or use a JSON config file `exmailer.json`:
-
 ```json
 {
   "domain": "CORP",
