@@ -160,7 +160,7 @@ minversion = "7.2"
 addopts = [
     "--verbose",
     "--cov=exmailer",
-    # "--cov-report=term-missing",
+    "--cov-report=term-missing",
     # "--cov-report=html",
     # "--cov-report=xml",
 ]

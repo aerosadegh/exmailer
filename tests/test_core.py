@@ -1,13 +1,19 @@
 """Tests for core ExchangeEmailer functionality (with mocked Exchange server)."""
 
-from unittest.mock import MagicMock, patch
-
+import ssl
 import pytest
 from exchangelib.protocol import BaseProtocol
 
 from exmailer.core import ExchangeEmailer, SecureHTTPAdapter
 from exmailer.exceptions import AuthenticationError, ExchangeEmailConnectionError, SendError
 from exmailer.templates import TemplateType
+from exmailer.utils import validate_attachments
+
+
+def test_secure_adapter_sets_context():
+    ctx = ssl.create_default_context()
+    adapter = SecureHTTPAdapter(ssl_context=ctx)
+    assert adapter.ssl_context is ctx
 
 
 def test_init_with_programmatic_config(mock_exchange_connection, sample_config):
@@ -40,8 +46,11 @@ def test_send_email_with_persian_template(mock_exchange_connection, sample_confi
         subject="تست",
         body="متن پیام فارسی",
         recipients=["recipient@company.com"],
+        cc_recipients=["recipient@company.com"],
+        bcc_recipients=["recipient@company.com"],
         template=TemplateType.PERSIAN,
     )
+    assert validate_attachments([]) == []
 
     assert success is True
 

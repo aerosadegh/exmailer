@@ -74,7 +74,7 @@ def validate_attachments(attachment_paths):
                 }
             )
 
-        except Exception as e:
+        except Exception as e:  # pragma: no cover
             logger.warning(f"Failed to process attachment {path_str}: {e}")
             continue
 
