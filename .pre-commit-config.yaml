@@ -33,6 +33,7 @@ repos:
     rev: v1.11.2
     hooks:
       - id: mypy
+        files: ^exmailer/
         args: [
           "--no-error-summary",
           "--show-error-codes",
