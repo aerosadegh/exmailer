@@ -7,7 +7,7 @@ path = "exmailer/__init__.py"
 
 [project]
 name = "exmailer"
-version = "1.0.4"
+version = "1.0.5"
 description = "Send emails via Microsoft Exchange Server with HTML template support"
 readme = "README.md"
 authors = [{ name = "Sadegh Yazdani", email = "sadegh.yazdani@example.com" }]
