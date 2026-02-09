@@ -7,7 +7,13 @@ from .exceptions import (
 )
 from .templates import get_default_template, get_persian_template, register_custom_template
 
-__version__ = "1.0.2"
+try:
+    from importlib.metadata import version
+
+    __version__ = version("exmailer")
+except Exception:  # pragma: no cover
+    __version__ = "0.0.0-dev"
+
 __author__ = "Sadegh Yazdani"
 __all__ = [
     "ExchangeEmailer",
