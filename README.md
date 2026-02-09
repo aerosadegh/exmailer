@@ -80,10 +80,10 @@ with ExchangeEmailer() as emailer:
     )
 ```
 
-### Using CLI (Under Construction)
+### Using CLI
 
 ```bash
-python -m exchange_emailer \
+python3 -m exmailer \
     --subject "Weekly Report" \
     --body "Report content here" \
     --to recipient@company.com \
