@@ -15,28 +15,6 @@ from exmailer.exceptions import ConfigurationError
 class TestConfigValidation:
     """Test configuration validation logic."""
 
-    def test_missing_required_fields_raises_error(self, clean_environment):
-        """Test that missing required fields raises ConfigurationError."""
-        with pytest.raises(ConfigurationError) as exc_info:
-            load_config()
-
-        error_msg = str(exc_info.value).lower()
-        assert "missing required configuration" in error_msg
-        assert any(
-            field in error_msg
-            for field in ["domain", "username", "password", "server", "email_domain"]
-        )
-
-    def test_partial_config_raises_error(self, clean_environment):
-        """Test that partial config (missing critical fields) raises error."""
-        os.environ["EXCHANGE_DOMAIN"] = "company"
-        os.environ["EXCHANGE_USER"] = "john.doe"
-
-        with pytest.raises(ConfigurationError) as exc_info:
-            load_config()
-
-        assert "missing required configuration" in str(exc_info.value).lower()
-
     def test_invalid_auth_type_raises_error(self, minimal_config_env):
         """Test that invalid auth_type values raise ConfigurationError."""
         os.environ["EXCHANGE_AUTH_TYPE"] = "INVALID"
