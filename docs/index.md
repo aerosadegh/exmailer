@@ -1,4 +1,4 @@
-# Ex<span style="color:gray">change E</span>mailer
+# Ex<span style="color:lightgray">change E</span>mailer
 
 <div align="center">
   <p><strong>Send emails via Microsoft Exchange Server with HTML template support</strong></p>
