@@ -2,7 +2,6 @@ site_name: ExMailer Documentation
 site_description: Send emails via Microsoft Exchange Server with Persian/RTL support
 site_author: Sadegh Yazdani
 site_url: https://exmailer.readthedocs.io
-
 repo_name: aerosadegh/exmailer
 repo_url: https://github.com/aerosadegh/exmailer
 edit_uri: edit/main/docs/
@@ -25,7 +24,6 @@ theme:
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
-
   features:
     - navigation.instant
     - navigation.tracking
@@ -40,7 +38,6 @@ theme:
     - content.code.copy
     - content.code.annotate
     - content.tabs.link
-
   icon:
     repo: fontawesome/brands/github
     edit: material/pencil
@@ -56,7 +53,6 @@ markdown_extensions:
   - toc:
       permalink: true
       title: On this page
-
   - pymdownx.arithmatex:
       generic: true
   - pymdownx.betterem:
@@ -87,7 +83,7 @@ markdown_extensions:
 
 plugins:
   - search:
-      separator: '[\s\-,:!=\[\]()"/]+|(?!\b)(?=[A-Z][a-z])|\.(?!\d)|&[lg]t;'
+      separator: '[\s-,:!=\[\]()"/]+|(?!\b)(?=[A-Z][a-z])|\.(?!\d)|&[lg]t;'
   - mkdocstrings:
       handlers:
         python:
@@ -137,11 +133,9 @@ extra:
       link: https://github.com/aerosadegh/exmailer
     - icon: fontawesome/brands/python
       link: https://pypi.org/project/exmailer/
-
   version:
     provider: mike
-
-copyright: Copyright &copy; 2026 Sadegh Yazdani. Licensed under GPL-3.0.
+  copyright: Copyright © 2026 Sadegh Yazdani. Licensed under GPL-3.0.
 
 extra_css:
   - stylesheets/extra.css

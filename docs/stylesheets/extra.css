@@ -1,0 +1,17 @@
+/* docs/stylesheets/extra.css */
+:root {
+  --md-primary-fg-color: #5e35b1;
+  --md-primary-fg-color--light: #9575cd;
+  --md-primary-fg-color--dark: #311b92;
+}
+
+/* Custom styles for RTL content */
+.rtl {
+  direction: rtl;
+  text-align: right;
+}
+
+/* Code block improvements */
+.highlight .hll {
+  background-color: #fff3e0;
+}

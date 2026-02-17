@@ -1,0 +1,7 @@
+# docs/requirements.txt
+mkdocs>=1.6.0
+mkdocs-material>=9.5.0
+mkdocs-awesome-pages-plugin>=2.9.0
+mkdocstrings[python]>=0.26.0
+pymdown-extensions>=10.0
+mike>=2.0.0  # For versioning support
