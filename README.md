@@ -1,4 +1,4 @@
-# Ex(change E)mailer 🐍
+# Ex<span style="color:gray">change E</span>mailer 🐍
 
 <div align="center">
   <p><strong>Enterprise-Grade Microsoft Exchange Email Client with HTML Template Support</strong></p>
