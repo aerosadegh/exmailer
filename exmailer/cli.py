@@ -64,16 +64,18 @@ def main():
     """Main CLI entry point."""
     args = parse_args()
 
-    # Handle body content (file or direct text)
-    body_content = args.body
-    if args.body.startswith("@"):
-        file_path = args.body[1:]
-        try:
-            with open(file_path, encoding="utf-8") as f:
-                body_content = f.read()
-        except Exception as e:
-            print(f"❌ Error reading body file '{file_path}': {e!s}", file=sys.stderr)
-            sys.exit(1)
+    # 1. Handle body content using a match case with a guard clause
+    match args.body:
+        case body_text if body_text.startswith("@"):
+            file_path = body_text[1:]
+            try:
+                with open(file_path, encoding="utf-8") as f:
+                    body_content = f.read()
+            except Exception as e:
+                print(f"❌ Error reading body file '{file_path}': {e!s}", file=sys.stderr)
+                sys.exit(1)
+        case text:
+            body_content = text
 
     # Handle template selection
     template = None
@@ -102,15 +104,19 @@ def main():
             print(f"❌ Error loading template file '{template_path}': {e!s}", file=sys.stderr)
             sys.exit(1)
     else:
-        # Use built-in template mapping
-        template_map = {
-            "persian": TemplateType.PERSIAN,
-            "english": TemplateType.DEFAULT,
-            "minimal": "minimal",
-            "plain": TemplateType.PLAIN,
-            "none": TemplateType.PLAIN,
-        }
-        template = template_map.get(args.template, TemplateType.PERSIAN)
+        # 2. Use match-case instead of dictionary mapping for built-ins
+        match args.template:
+            case "persian" | "farsi" | "rtl" | "fa":
+                template = TemplateType.PERSIAN
+            case "default" | "english" | "ltr" | "en":
+                template = TemplateType.DEFAULT
+            case "minimal" | "simple":
+                template = "minimal"
+            case "plain" | "none":
+                template = TemplateType.PLAIN
+            case _:
+                # Default fallback if args.template is missing or unrecognized
+                template = TemplateType.DEFAULT
 
     # Process attachments with path expansion
     attachments = []

@@ -257,30 +257,31 @@ def get_template(template: str | TemplateType) -> str:
         >>> get_template("my_custom_template")
     """
     # Handle TemplateType enum
-    if isinstance(template, TemplateType):
-        if template == TemplateType.PERSIAN:
+    match template:
+        # Handle TemplateType enum directly
+        case TemplateType.PERSIAN:
             return get_persian_template()
-        elif template == TemplateType.DEFAULT:
+        case TemplateType.DEFAULT:
             return get_default_template()
-        elif template == TemplateType.PLAIN:
+        case TemplateType.PLAIN:
             return "{body}"  # No template
-        else:
-            raise ValueError(f"Unknown template type: {template}")
 
-    # Handle string - check built-in templates first
-    if isinstance(template, str):
-        template_lower = template.lower()
+        # Match if it's a string, and bind it to 't_str'
+        case str() as t_str:
+            # Nested match on the lowercased string using the OR (|) operator
+            match t_str.lower():
+                case "persian" | "farsi" | "rtl" | "fa":
+                    return get_persian_template()
+                case "default" | "english" | "ltr" | "en":
+                    return get_default_template()
+                case "minimal" | "simple":
+                    return get_minimal_template()
+                case "plain" | "none":
+                    return "{body}"
+                case _:
+                    # Try to get custom template if no built-in matches
+                    return get_custom_template(t_str)
 
-        if template_lower in ("persian", "farsi", "rtl", "fa"):
-            return get_persian_template()
-        elif template_lower in ("default", "english", "ltr", "en"):
-            return get_default_template()
-        elif template_lower in ("minimal", "simple"):
-            return get_minimal_template()
-        elif template_lower in ("plain", "none"):
-            return "{body}"
-        else:
-            # Try to get custom template
-            return get_custom_template(template)
-
-    raise ValueError(f"Invalid template: {template}")
+        # Fallback for unexpected types
+        case _:
+            raise ValueError(f"Invalid template type/name: {template}")
