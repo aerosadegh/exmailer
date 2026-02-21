@@ -290,7 +290,7 @@ class TestAutoDiscovery:
         monkeypatch.setattr(Path, "home", lambda: mock_home)
 
         # Lower priority
-        (mock_home / ".exmailer.json").write_text(
+        (mock_home / "exmailer.json").write_text(
             json.dumps(
                 {
                     "domain": "home-domain",

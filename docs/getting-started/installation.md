@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Python 3.8 or higher
+- Python 3.11 or higher
 - Microsoft Exchange Server access
 - Valid domain credentials
 
@@ -11,48 +11,49 @@
 Using pip:
 ```bash
 pip install exmailer
-
+```
 Using uv (recommended):
 
-bash
+```bash
 uv pip install exmailer
-
+```
 ## Install from Source
 
 Clone the repository:
 
-bash
+```bash
 git clone https://github.com/aerosadegh/exmailer.git
 cd exmailer
-
+```
 Install with uv:
 
-bash
+```bash
 uv sync
+```
 
 Or with pip:
 
-bash
+```bash
 pip install -e .
-
+```
 ## Verify Installation
 
-python
+```python
 import exmailer
 print(exmailer.__version__)
-
+```
 ## Development Installation
 
 For development, install with additional dependencies:
 
-bash
+```bash
 uv sync --all-extras
-
+```
 Or:
 
-bash
+```bash
 pip install -e ".[dev]"
-
+```
 This includes:
 
 - pytest for testing

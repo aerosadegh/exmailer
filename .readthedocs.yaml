@@ -11,6 +11,8 @@ build:
   jobs:
     post_install:
       - pip install -e .
+    post_checkout:
+      - git-changelog -o docs/changelog.md || echo "git-changelog not available"
 
 # Build documentation with MkDocs
 mkdocs:
