@@ -10,10 +10,9 @@ build:
     python: "3.12"
   jobs:
     post_install:
-      - pip install -e .
-    post_checkout:
-      - git-changelog -o changelog.md || echo "git-changelog not available"
-      - git-changelog -o docs/changelog.md || echo "git-changelog not available"
+      # Generate changelog after all dependencies are installed
+      - git-changelog -o changelog.md || echo "git-changelog failed"
+      - git-changelog -o docs/changelog.md || echo "git-changelog failed"
 
 # Build documentation with MkDocs
 mkdocs:
