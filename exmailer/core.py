@@ -77,6 +77,7 @@ class ExchangeEmailer:
 
         Examples:
             # Method 1: Programmatic config (recommended for scripts)
+            ```python
             emailer = ExchangeEmailer(config={
                 "domain": "corp",
                 "username": "john.doe",
@@ -84,12 +85,17 @@ class ExchangeEmailer:
                 "server": "mail.corp.com",
                 "email_domain": "corp.com"
             })
+            ```
 
             # Method 2: Config file
+            ```python
             emailer = ExchangeEmailer(config_path="~/.config/exmailer/config.json")
+            ```
 
             # Method 3: Auto-discovery (looks in default locations)
+            ```python
             emailer = ExchangeEmailer()
+            ```
         """
         self.verbose = verbose
         self.config = load_config(config_path=config_path, config_dict=config)
