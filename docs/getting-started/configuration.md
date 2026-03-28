@@ -41,7 +41,7 @@ config = {
     "server": "mail.company.com",
     "email_domain": "company.com",
     "auth_type": "NTLM",       # optional
-    "save_copy": True           # optional
+    "save_copy": True          # optional
 }
 
 emailer = ExchangeEmailer(config=config)
@@ -68,11 +68,14 @@ emailer = ExchangeEmailer(config_file="/path/to/exmailer.json")
 If no explicit path is given, ExMailer looks for configuration files in the following order (first found wins):
 
 1. `./exmailer.json`
-2. `./exmailer.yaml` / `./exmailer.yml`
-3. `~/.config/exmailer/config.json`
-4. `~/.config/exmailer/exmailer.json`
-5. `~/.config/exmailer/config.yaml` / `~/.config/exmailer/config.yml`
-6. `~/.config/exmailer/exmailer.yaml` / `~/.config/exmailer/exmailer.yml`
+2. `./exmailer.yaml`
+3. `./exmailer.yml`
+4. `~/.config/exmailer/config.json`
+5. `~/.config/exmailer/exmailer.json`
+6. `~/.config/exmailer/config.yaml`
+7. `~/.config/exmailer/config.yml`
+8. `~/.config/exmailer/exmailer.yaml`
+9. `~/.config/exmailer/exmailer.yml`
 
 #### JSON Example (`exmailer.json`)
 
@@ -113,7 +116,7 @@ EXCHANGE_PASS="your-password"
 EXCHANGE_SERVER="mail.company.com"
 EXCHANGE_EMAIL_DOMAIN="company.com"
 EXCHANGE_AUTH_TYPE="NTLM"      # optional, defaults to NTLM
-EXCHANGE_SAVE_COPY="true"       # optional, defaults to false
+EXCHANGE_SAVE_COPY="true"      # optional, defaults to false
 ```
 
 Boolean values accept `true`/`false`, `yes`/`no`, `1`/`0` (case‑insensitive).
