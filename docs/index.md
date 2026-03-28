@@ -35,9 +35,8 @@ from exmailer import ExchangeEmailer
 
 with ExchangeEmailer() as emailer:
     emailer.send_email(
-        subject="Hello There 👋🏻",  # Hello World in Persian
+        subject="Hello There 👋🏻",  # Hello World
         body="<p>Test email</p>",
         recipients=["colleague@company.com"],
-        is_persian=True
     )
 ```

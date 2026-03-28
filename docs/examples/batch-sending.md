@@ -5,6 +5,7 @@
 """
 Examples of using ExchangeEmailer with different templates.
 """
+from pathlib import Path
 
 from exmailer import ExchangeEmailer, TemplateType, register_custom_template
 
@@ -57,15 +58,9 @@ def example_4_template_with_string():
             subject="تست",
             body="متن پیام",
             recipients=["user@company.com"],
-            template="farsi",  # Alternative name
+            template=TemplateType.PERSIAN,  # Alternative way
         )
 
-        emailer.send_email(
-            subject="تست",
-            body="متن پیام",
-            recipients=["user@company.com"],
-            template="rtl",  # Another alternative
-        )
 
 
 def example_5_custom_template():
@@ -281,41 +276,65 @@ def example_9_conditional_template():
     )
 
 
-def example_10_migration_from_old_api():
-    """Example 10: Migration guide from old is_persian parameter."""
+def example_10_attachments_and_parameter_flexibility() -> None:
+    """
+    Example 10: Demonstrating attachment handling and template parameter flexibility.
+    
+    This example showcases how to attach multiple files using both absolute 
+    and relative paths while utilizing different template selection methods 
+    (Enum vs. String).
+    
+    Note:
+        Attachments are passed as a list of strings representing file paths.
+    """
+    # Define file paths using pathlib for cross-platform reliability
+    # In a real scenario, ensure these files exist or handle the FileNotFoundError
+    report_file: Path = Path("./reports/monthly_stats.pdf")
+    log_file: Path = Path("logs/system.log")
+    
+    # We convert Paths to strings as required by the current exmailer implementation
+    attachments: List[str] = [str(report_file), str(log_file)]
 
-    # OLD WAY (deprecated)
-    # emailer.send_email(..., is_persian=True)
-
-    # NEW WAY - Option 1: Use TemplateType enum
+    # Option 1: Using TemplateType Enum (Recommended for Type Safety)
+    # This approach prevents typos and is easily discoverable via IDE autocomplete.
     with ExchangeEmailer() as emailer:
-        emailer.send_email(
-            subject="سلام",
-            body="متن",
-            recipients=["user@company.com"],
-            template=TemplateType.PERSIAN,  # Replaces is_persian=True
-        )
+        try:
+            emailer.send_email(
+                subject="گزارش نهایی به همراه پیوست",
+                body="<p>با سلام، فایل‌های درخواستی به پیوست ارسال شد.</p>",
+                recipients=["manager@company.com"],
+                template=TemplateType.PERSIAN,  # Explicit RTL Persian template
+                attachments=attachments
+            )
+        except Exception as error:
+            print(f"Failed to send email via Enum: {error}")
 
-    # NEW WAY - Option 2: Use string
+    # Option 2: Using String Identifier
+    # Useful for dynamic template selection from configuration files or databases.
     with ExchangeEmailer() as emailer:
-        emailer.send_email(
-            subject="سلام",
-            body="متن",
-            recipients=["user@company.com"],
-            template="persian",  # Replaces is_persian=True
-        )
+        try:
+            emailer.send_email(
+                subject="Notification with Attachment",
+                body="Please find the logs attached for your review.",
+                recipients=["devops@company.com"],
+                template="simple",
+                attachments=[str(log_file)]
+            )
+        except Exception as error:
+            print(f"Failed to send email via string: {error}")
 
-    # For backward compatibility helper function:
-    def send_email_compat(emailer, is_persian=False, **kwargs):
-        """Compatibility wrapper for old is_persian parameter."""
-        template = TemplateType.PERSIAN if is_persian else TemplateType.DEFAULT
-        return emailer.send_email(template=template, **kwargs)
 
 
 if __name__ == "__main__":
     # Run examples (comment out as needed)
     example_1_persian_template()
     example_2_english_template()
+    example_3_plain_text()
+    example_4_template_with_string()
     example_5_custom_template()
+    example_6_bilingual_email()
     example_7_template_with_variables()
+    example_8_corporate_template()
+    example_9_conditional_template()
+    example_10_attachments_and_parameter_flexibility()
 ```
