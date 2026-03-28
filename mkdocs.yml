@@ -114,9 +114,7 @@ nav:
       - CLI Reference: user-guide/cli-reference.md
       - Templates: user-guide/templates.md
   - Examples:
-      - Simple Email: examples/simple-email.md
-      - Persian Email: examples/persian-email.md
-      - With Attachments: examples/with-attachments.md
+      - Example Email: examples/examples.md
       - Batch Sending: examples/batch-sending.md
   - API Reference:
       - Core: api/core.md
