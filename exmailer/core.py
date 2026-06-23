@@ -349,7 +349,24 @@ class ExchangeEmailer:
     ) -> str:
         """
         Creates a new meeting in the Exchange calendar and sends invites.
-        Returns the unique Exchange ID (item.id) for future updates/cancellations.
+
+        Args:
+            subject: The subject or title of the meeting.
+            start: A timezone-aware datetime object for the meeting start.
+            end: A timezone-aware datetime object for the meeting end.
+            body: The HTML or plain text body of the meeting invite.
+            required_attendees: Sequence of email addresses for required participants.
+            optional_attendees: Sequence of email addresses for optional participants.
+            location: The physical or virtual location of the meeting.
+            template: The template to wrap the body in (default: Persian RTL).
+            template_vars: Variables for dynamic injection into the template.
+            is_response_requested: If True, asks attendees to RSVP (Accept/Decline).
+
+        Returns:
+            str: The unique Exchange ID of the created meeting item.
+
+        Raises:
+            SendError: If the meeting creation or network request fails.
         """
         try:
             formatted_body = self._render_body(body, template, template_vars)
@@ -395,6 +412,25 @@ class ExchangeEmailer:
     ) -> bool:
         """
         Updates an existing meeting by its Exchange ID and notifies attendees.
+
+        Args:
+            exchange_id: The unique ID returned when the meeting was created.
+            subject: The updated subject of the meeting.
+            start: The updated timezone-aware start time.
+            end: The updated timezone-aware end time.
+            body: The updated body content.
+            required_attendees: Updated sequence of required attendees.
+            optional_attendees: Updated sequence of optional attendees.
+            location: The updated meeting location.
+            template: The template to use for the updated body.
+            template_vars: Variables for dynamic injection into the template.
+            is_response_requested: If True, asks attendees to RSVP to the update.
+
+        Returns:
+            bool: True if the meeting was updated successfully, False if ID is missing.
+
+        Raises:
+            SendError: If the meeting update request fails.
         """
         if not exchange_id:
             logger.warning("Update aborted: `exchange_id` is empty or None.")
@@ -424,6 +460,15 @@ class ExchangeEmailer:
     def cancel_meeting_invite(self, exchange_id: str) -> bool:
         """
         Cancels an existing meeting by its Exchange ID and notifies attendees.
+
+        Args:
+            exchange_id: The unique ID returned when the meeting was created.
+
+        Returns:
+            bool: True if the meeting was canceled successfully, False if `exchange_id` is empty or None.
+
+        Raises:
+            SendError: If the meeting cancellation request fails.
         """
         if not exchange_id:
             logger.warning("Cancellation aborted: `exchange_id` is empty or None.")
