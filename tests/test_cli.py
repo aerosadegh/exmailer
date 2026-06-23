@@ -200,16 +200,16 @@ def test_cli_body_from_file_not_found(mock_emailer_cls, tmp_path):
         assert exc_info.value.code == 1
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="chmod 000 does not prevent reads on Windows")
 @patch("exmailer.cli.ExchangeEmailer")
 def test_cli_body_from_file_permission_error(mock_emailer_cls, tmp_path):
     """Test error handling for permission denied on body file."""
-    # Create file then make it unreadable (best effort on Windows)
+    # Create file then make it unreadable
     body_file = tmp_path / "protected.txt"
     body_file.write_text("secret", encoding="utf-8")
 
-    # Skip on Windows where chmod doesn't work the same way
-    if sys.platform != "win32":
-        body_file.chmod(0o000)  # Remove all permissions
+    # Remove all permissions (safe to do now, as Windows won't run this test)
+    body_file.chmod(0o000)
 
     test_args = [
         "exmailer",
@@ -220,14 +220,14 @@ def test_cli_body_from_file_permission_error(mock_emailer_cls, tmp_path):
         "--to",
         "user@company.com",
     ]
+
     with patch.object(sys, "argv", test_args):
         with pytest.raises(SystemExit) as exc_info:
             main()
         assert exc_info.value.code == 1
 
-    # Restore permissions for cleanup if we changed them
-    if sys.platform != "win32":
-        body_file.chmod(0o644)
+    # Restore permissions for cleanup
+    body_file.chmod(0o644)
 
 
 @patch("exmailer.cli.ExchangeEmailer")
