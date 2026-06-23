@@ -1,14 +1,17 @@
 """Core ExchangeEmailer class with flexible template system."""
 
+import datetime
 import logging
 import ssl
 from collections.abc import Sequence
 from typing import Any, Literal
+from zoneinfo import ZoneInfo
 
 from exchangelib import (
     DELEGATE,
     Account,
     Build,
+    CalendarItem,
     Configuration,
     Credentials,
     FileAttachment,
@@ -77,6 +80,7 @@ class ExchangeEmailer:
 
         Examples:
             # Method 1: Programmatic config (recommended for scripts)
+            ```python
             emailer = ExchangeEmailer(config={
                 "domain": "corp",
                 "username": "john.doe",
@@ -84,12 +88,17 @@ class ExchangeEmailer:
                 "server": "mail.corp.com",
                 "email_domain": "corp.com"
             })
+            ```
 
             # Method 2: Config file
+            ```python
             emailer = ExchangeEmailer(config_path="~/.config/exmailer/config.json")
+            ```
 
             # Method 3: Auto-discovery (looks in default locations)
+            ```python
             emailer = ExchangeEmailer()
+            ```
         """
         self.verbose = verbose
         self.config = load_config(config_path=config_path, config_dict=config)
@@ -172,6 +181,27 @@ class ExchangeEmailer:
         except Exception as e:  # pragma: no cover
             raise ExchangeEmailConnectionError(f"Unexpected connection error: {e!s}") from e
 
+    def _render_body(
+        self, body: str, template: str | TemplateType | None, template_vars: dict[str, Any] | None
+    ) -> str:
+        """Helper method to share template rendering between Emails and Calendar Invites."""
+        template_vars = template_vars or {}
+        template_vars["body"] = body.format(**template_vars)
+
+        if template is None or template == TemplateType.PLAIN:
+            return body.format(**template_vars)
+
+        template_html = get_template(template)
+        return template_html.format(**template_vars)
+
+    def _ensure_timezone(self, dt: datetime.datetime) -> datetime.datetime:
+        """Ensure the datetime is timezone aware to prevent Exchange Server rejection."""
+        if dt.tzinfo is None:
+            # Fallback to local timezone or UTC if user passes a naive datetime
+            fallback_tz = self.config.get("timezone", "UTC")
+            return dt.replace(tzinfo=ZoneInfo(fallback_tz))
+        return dt
+
     def send_email(
         self,
         subject: str,
@@ -241,18 +271,7 @@ class ExchangeEmailer:
         try:
             # Get the appropriate template
             ## Apply template variables if provided
-            template_vars = template_vars or {}
-            template_vars["body"] = body.format(**template_vars)
-
-            if template is None or template == TemplateType.PLAIN:
-                # No template - use body as-is
-                formatted_body = body.format(**template_vars)
-            else:
-                # Get template (handles both TemplateType enum and string names)
-                template_html = get_template(template)
-
-                # Format body with template
-                formatted_body = template_html.format(**template_vars)
+            formatted_body = self._render_body(body, template, template_vars)
 
             # Create message
             msg = Message(
@@ -260,16 +279,14 @@ class ExchangeEmailer:
                 subject=subject,
                 body=HTMLBody(formatted_body),
                 to_recipients=[Mailbox(email_address=email) for email in recipients],
-                cc_recipients=cc_recipients or [],
-                bcc_recipients=bcc_recipients or [],
+                cc_recipients=(
+                    [Mailbox(email_address=e) for e in cc_recipients] if cc_recipients else []
+                ),
+                bcc_recipients=(
+                    [Mailbox(email_address=e) for e in bcc_recipients] if bcc_recipients else []
+                ),
                 importance=importance,
             )
-
-            # Add CC/BCC recipients if provided
-            if cc_recipients:
-                msg.cc_recipients = [Mailbox(email_address=email) for email in cc_recipients]
-            if bcc_recipients:
-                msg.bcc_recipients = [Mailbox(email_address=email) for email in bcc_recipients]
 
             # Process attachments
             if attachments:
@@ -312,6 +329,160 @@ class ExchangeEmailer:
             if self.verbose:  # pragma: no cover
                 print(f"❌ Failed to send email: {e!s}")
             raise
+
+    # ==========================================
+    # CALENDAR / MEETING METHODS
+    # ==========================================
+
+    def send_meeting_invite(
+        self,
+        subject: str,
+        start: datetime.datetime,
+        end: datetime.datetime,
+        body: str = "",
+        required_attendees: Sequence[str] | None = None,
+        optional_attendees: Sequence[str] | None = None,
+        location: str = "",
+        template: str | TemplateType | None = TemplateType.PERSIAN,
+        template_vars: dict[str, Any] | None = None,
+        is_response_requested: bool = True,
+    ) -> str:
+        """
+        Creates a new meeting in the Exchange calendar and sends invites.
+
+        Args:
+            subject: The subject or title of the meeting.
+            start: A timezone-aware datetime object for the meeting start.
+            end: A timezone-aware datetime object for the meeting end.
+            body: The HTML or plain text body of the meeting invite.
+            required_attendees: Sequence of email addresses for required participants.
+            optional_attendees: Sequence of email addresses for optional participants.
+            location: The physical or virtual location of the meeting.
+            template: The template to wrap the body in (default: Persian RTL).
+            template_vars: Variables for dynamic injection into the template.
+            is_response_requested: If True, asks attendees to RSVP (Accept/Decline).
+
+        Returns:
+            str: The unique Exchange ID of the created meeting item.
+
+        Raises:
+            SendError: If the meeting creation or network request fails.
+        """
+        try:
+            formatted_body = self._render_body(body, template, template_vars)
+
+            # Ensure timezones are attached before sending to EWS
+            start_dt = self._ensure_timezone(start)
+            end_dt = self._ensure_timezone(end)
+
+            item = CalendarItem(
+                account=self.account,
+                folder=self.account.calendar,
+                start=start_dt,
+                end=end_dt,
+                subject=subject,
+                body=HTMLBody(formatted_body),
+                location=location,
+                required_attendees=required_attendees or [],
+                optional_attendees=optional_attendees or [],
+                is_response_requested=is_response_requested,
+            )
+
+            item.save(send_meeting_invitations="SendToAllAndSaveCopy")
+            logger.info(f"✅ Meeting '{subject}' created successfully.")
+            return item.id  # type: ignore
+
+        except Exception as e:
+            logger.error(f"❌ Failed to create meeting invite: {e!s}")
+            raise SendError(f"Failed to create meeting: {e!s}") from e
+
+    def update_meeting_invite(
+        self,
+        exchange_id: str,
+        subject: str,
+        start: datetime.datetime,
+        end: datetime.datetime,
+        body: str = "",
+        required_attendees: Sequence[str] | None = None,
+        optional_attendees: Sequence[str] | None = None,
+        location: str = "",
+        template: str | TemplateType | None = TemplateType.PERSIAN,
+        template_vars: dict[str, Any] | None = None,
+        is_response_requested: bool = True,
+    ) -> bool:
+        """
+        Updates an existing meeting by its Exchange ID and notifies attendees.
+
+        Args:
+            exchange_id: The unique ID returned when the meeting was created.
+            subject: The updated subject of the meeting.
+            start: The updated timezone-aware start time.
+            end: The updated timezone-aware end time.
+            body: The updated body content.
+            required_attendees: Updated sequence of required attendees.
+            optional_attendees: Updated sequence of optional attendees.
+            location: The updated meeting location.
+            template: The template to use for the updated body.
+            template_vars: Variables for dynamic injection into the template.
+            is_response_requested: If True, asks attendees to RSVP to the update.
+
+        Returns:
+            bool: True if the meeting was updated successfully, False if ID is missing.
+
+        Raises:
+            SendError: If the meeting update request fails.
+        """
+        if not exchange_id:
+            logger.warning("Update aborted: `exchange_id` is empty or None.")
+            return False
+
+        try:
+            item = self.account.calendar.get(id=exchange_id)
+            formatted_body = self._render_body(body, template, template_vars)
+
+            item.start = self._ensure_timezone(start)
+            item.end = self._ensure_timezone(end)
+            item.subject = subject
+            item.body = HTMLBody(formatted_body)
+            item.location = location
+            item.required_attendees = required_attendees or []
+            item.optional_attendees = optional_attendees or []
+            item.is_response_requested = is_response_requested
+
+            item.save(send_meeting_invitations="SendToAllAndSaveCopy")
+            logger.info(f"✅ Meeting '{subject}' updated successfully.")
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ Failed to update meeting {exchange_id}: {e!s}")
+            raise SendError(f"Failed to update meeting: {e!s}") from e
+
+    def cancel_meeting_invite(self, exchange_id: str) -> bool:
+        """
+        Cancels an existing meeting by its Exchange ID and notifies attendees.
+
+        Args:
+            exchange_id: The unique ID returned when the meeting was created.
+
+        Returns:
+            bool: True if the meeting was canceled successfully, False if `exchange_id` is empty or None.
+
+        Raises:
+            SendError: If the meeting cancellation request fails.
+        """
+        if not exchange_id:
+            logger.warning("Cancellation aborted: `exchange_id` is empty or None.")
+            return False
+
+        try:
+            item = self.account.calendar.get(id=exchange_id)
+            item.delete(send_meeting_cancellations="SendToAllAndSaveCopy")
+            logger.info(f"✅ Meeting {exchange_id} canceled successfully.")
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ Failed to cancel meeting {exchange_id}: {e!s}")
+            raise SendError(f"Failed to cancel meeting: {e!s}") from e
 
     def __enter__(self):  # pragma: no cover
         return self
