@@ -7,8 +7,8 @@ path = "exmailer/__init__.py"
 
 [project]
 name = "exmailer"
-version = "1.0.5"
-description = "Send emails via Microsoft Exchange Server with HTML template support"
+version = "1.1.0"
+description = "Send emails and calendars via Microsoft Exchange Server with HTML template support"
 readme = "README.md"
 authors = [{ name = "Sadegh Yazdani", email = "sadegh.yazdani@example.com" }]
 license = { text = "GPL-3.0-or-later" }
@@ -95,6 +95,7 @@ dev-dependencies = [
     "ruff>=0.1.0",
     "pyyaml>=6.0",
     "python-dotenv>=1.2.0",
+    "types-requests",
 ]
 
 [tool.uv.sources]
@@ -180,7 +181,7 @@ addopts = [
 ]
 
 [tool.coverage.run]
-source = ["exchange_emailer"]
+source = ["exmailer"]
 omit = ["*/tests/*", "*/__pycache__/*", "*/site-packages/*"]
 
 [tool.coverage.report]
