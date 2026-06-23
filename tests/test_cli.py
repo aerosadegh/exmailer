@@ -1,5 +1,6 @@
 """Tests for CLI interface."""
 
+import datetime
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -200,16 +201,16 @@ def test_cli_body_from_file_not_found(mock_emailer_cls, tmp_path):
         assert exc_info.value.code == 1
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="chmod 000 does not prevent reads on Windows")
 @patch("exmailer.cli.ExchangeEmailer")
 def test_cli_body_from_file_permission_error(mock_emailer_cls, tmp_path):
     """Test error handling for permission denied on body file."""
-    # Create file then make it unreadable (best effort on Windows)
+    # Create file then make it unreadable
     body_file = tmp_path / "protected.txt"
     body_file.write_text("secret", encoding="utf-8")
 
-    # Skip on Windows where chmod doesn't work the same way
-    if sys.platform != "win32":
-        body_file.chmod(0o000)  # Remove all permissions
+    # Remove all permissions (safe to do now, as Windows won't run this test)
+    body_file.chmod(0o000)
 
     test_args = [
         "exmailer",
@@ -220,14 +221,14 @@ def test_cli_body_from_file_permission_error(mock_emailer_cls, tmp_path):
         "--to",
         "user@company.com",
     ]
+
     with patch.object(sys, "argv", test_args):
         with pytest.raises(SystemExit) as exc_info:
             main()
         assert exc_info.value.code == 1
 
-    # Restore permissions for cleanup if we changed them
-    if sys.platform != "win32":
-        body_file.chmod(0o644)
+    # Restore permissions for cleanup
+    body_file.chmod(0o644)
 
 
 @patch("exmailer.cli.ExchangeEmailer")
@@ -299,4 +300,123 @@ def test_cli_template_file_missing_placeholder(mock_emailer_cls, tmp_path):
     with patch.object(sys, "argv", test_args):
         with pytest.raises(SystemExit) as exc_info:
             main()
+        assert exc_info.value.code == 1
+
+
+def test_parse_args_meeting_options():
+    """Test parsing meeting-specific arguments."""
+    args = parse_args(
+        [
+            "--subject",
+            "CLI Meeting Test",
+            "--to",
+            "team@company.com",
+            "--meeting",
+            "--start",
+            "2026-06-25 10:00",
+            "--end",
+            "2026-06-25 11:00",
+            "--location",
+            "Conference Room A",
+            "--no-rsvp",
+        ]
+    )
+    assert args.meeting is True
+    assert args.start == "2026-06-25 10:00"
+    assert args.end == "2026-06-25 11:00"
+    assert args.location == "Conference Room A"
+    assert args.no_rsvp is True
+
+
+@patch("exmailer.cli.ExchangeEmailer")
+def test_cli_meeting_success_flow(mock_emailer_cls):
+    """Test successful CLI execution flow for creating a meeting."""
+    mock_emailer = MagicMock()
+    mock_emailer_cls.return_value.__enter__.return_value = mock_emailer
+    mock_emailer.send_meeting_invite.return_value = "mock_exchange_id_999"
+
+    test_args = [
+        "exmailer",
+        "--subject",
+        "Deploy Sync",
+        "--to",
+        "devops@company.com",
+        "--cc",
+        "manager@company.com",
+        "--meeting",
+        "--start",
+        "2026-06-25 10:00",
+        "--end",
+        "2026-06-25 11:00",
+        "--location",
+        "Virtual",
+    ]
+
+    with patch.object(sys, "argv", test_args):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+        # Verify it exited successfully
+        assert exc_info.value.code == 0
+
+        # Verify the meeting method was called (and NOT the email method)
+        mock_emailer.send_meeting_invite.assert_called_once()
+        assert not mock_emailer.send_email.called
+
+        # Verify exact parameters
+        call_kwargs = mock_emailer.send_meeting_invite.call_args[1]
+        assert call_kwargs["subject"] == "Deploy Sync"
+        assert call_kwargs["required_attendees"] == ["devops@company.com"]
+        assert call_kwargs["optional_attendees"] == ["manager@company.com"]
+        assert call_kwargs["location"] == "Virtual"
+
+        # Since --no-rsvp wasn't passed, it should default to requesting a response
+        assert call_kwargs["is_response_requested"] is True
+
+        # Verify the string was properly converted to a datetime object
+        assert isinstance(call_kwargs["start"], datetime.datetime)
+        assert call_kwargs["start"].hour == 10
+
+
+@patch("exmailer.cli.ExchangeEmailer")
+def test_cli_meeting_missing_dates(mock_emailer_cls):
+    """Test CLI fails gracefully if --meeting is passed without --start or --end."""
+    test_args = [
+        "exmailer",
+        "--subject",
+        "Invalid Meeting",
+        "--to",
+        "user@company.com",
+        "--meeting",
+        # Missing --start and --end!
+    ]
+
+    with patch.object(sys, "argv", test_args):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+        # Verify it exited with an error code
+        assert exc_info.value.code == 1
+
+
+@patch("exmailer.cli.ExchangeEmailer")
+def test_cli_meeting_invalid_date_format(mock_emailer_cls):
+    """Test CLI fails gracefully if the date string is formatted incorrectly."""
+    test_args = [
+        "exmailer",
+        "--subject",
+        "Bad Date Format",
+        "--to",
+        "user@company.com",
+        "--meeting",
+        "--start",
+        "2026/06/25 10:00 PM",  # 🚨 Invalid format! Should be YYYY-MM-DD HH:MM
+        "--end",
+        "2026-06-25 11:00",
+    ]
+
+    with patch.object(sys, "argv", test_args):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
         assert exc_info.value.code == 1

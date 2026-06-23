@@ -34,9 +34,13 @@ def load_config(
         default_paths = [
             Path.cwd() / "exmailer.json",
             Path.cwd() / "exmailer.yaml",
+            Path.cwd() / "exmailer.yml",
             Path.home() / ".config" / "exmailer" / "config.json",
-            Path.home() / ".exmailer.json",
-            Path.home() / ".exmailer.yaml",
+            Path.home() / ".config" / "exmailer" / "exmailer.json",
+            Path.home() / ".config" / "exmailer" / "config.yaml",
+            Path.home() / ".config" / "exmailer" / "config.yml",
+            Path.home() / ".config" / "exmailer" / "exmailer.yaml",
+            Path.home() / ".config" / "exmailer" / "exmailer.yml",
         ]
 
         for path in default_paths:

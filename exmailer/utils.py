@@ -1,10 +1,23 @@
 import logging
 import os
+from collections.abc import (
+    Iterator,
+    Sequence,
+)
 from pathlib import Path
+from typing import TypedDict
 
 logger = logging.getLogger(__name__)
 
 MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024  # 25MB Exchange limit
+
+
+class AttachmentData(TypedDict):
+    name: str
+    content: bytes
+    content_type: str
+    size: int
+    path: Path
 
 
 def get_content_type(filename: str) -> str:
@@ -28,29 +41,34 @@ def get_content_type(filename: str) -> str:
     return extensions.get(ext, "application/octet-stream")
 
 
-def validate_attachments(attachment_paths):
+def validate_attachments(attachment_paths: Sequence[str] | None) -> Iterator[AttachmentData]:
     """
     Validate and prepare attachments for sending.
-    Returns list of dicts with name, content, content_type, size.
+
+    Args:
+        attachment_paths: A sequence (list, tuple) of file paths to attach.
+
+    Yields:
+        AttachmentData: A dictionary containing validated file metadata and binary content.
     """
     if not attachment_paths:
-        return []
+        return
 
-    validated = []
     for path_str in attachment_paths:
         try:
             path = Path(path_str).expanduser().resolve()
 
-            if not path.exists():
-                logger.warning(f"Skipping missing attachment: {path}")
-                continue
-
-            if path.stat().st_size == 0:
-                logger.warning(f"Skipping empty file: {path}")
+            # Reject directories or missing files
+            if not path.is_file():
+                logger.warning(f"Skipping missing or invalid file: {path_str}")
                 continue
 
             # Explicitly convert size to int to prevent mock leakage
-            size = int(path.stat().st_size)  # ← Prevent MagicMock comparison errors
+            size = int(path.stat().st_size)
+
+            if size == 0:
+                logger.warning(f"Skipping empty file: {path_str}")
+                continue
 
             if size > MAX_ATTACHMENT_SIZE:
                 logger.warning(
@@ -64,18 +82,15 @@ def validate_attachments(attachment_paths):
             with open(path, "rb") as f:
                 content = f.read()
 
-            validated.append(
-                {
-                    "name": path.name,
-                    "content": content,
-                    "content_type": content_type,
-                    "size": size,  # Guaranteed int
-                    "path": path,
-                }
+            yield AttachmentData(
+                name=path.name,
+                content=content,
+                content_type=content_type,
+                size=size,
+                path=path,
             )
 
-        except Exception as e:  # pragma: no cover
-            logger.warning(f"Failed to process attachment {path_str}: {e}")
-            continue
-
-    return validated
+        except PermissionError:
+            logger.error(f"Permission denied when accessing attachment: {path_str}")
+        except OSError as e:
+            logger.error(f"I/O error processing attachment {path_str}: {e}")

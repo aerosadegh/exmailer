@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from .core import ExchangeEmailer
@@ -45,7 +46,7 @@ def parse_args(args=None):
     parser.add_argument("--subject", required=True, help="Email subject")
     parser.add_argument(
         "--body",
-        required=True,
+        required=False,
         help="Email body content (or path to file with @ prefix, e.g., @body.txt)",
     )
 
@@ -57,23 +58,57 @@ def parse_args(args=None):
     # Attachments
     parser.add_argument("--attachments", nargs="*", default=[], help="Files to attach")
 
+    # Calendar/Meeting Options
+    meeting_group = parser.add_argument_group("Meeting Options")
+    meeting_group.add_argument(
+        "--meeting",
+        action="store_true",
+        help="Send as a Calendar Meeting Invite instead of an Email",
+    )
+    meeting_group.add_argument(
+        "--start", type=str, help="Meeting start time (Format: 'YYYY-MM-DD HH:MM')"
+    )
+    meeting_group.add_argument(
+        "--end", type=str, help="Meeting end time (Format: 'YYYY-MM-DD HH:MM')"
+    )
+    meeting_group.add_argument("--location", type=str, default="", help="Meeting location")
+    meeting_group.add_argument(
+        "--no-rsvp", action="store_true", help="Do not request responses/RSVP from attendees"
+    )
+
     return parser.parse_args(args)
+
+
+def parse_datetime(dt_str: str) -> datetime:
+    """Helper to parse datetime from CLI string."""
+    try:
+        return datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
+    except ValueError:
+        print(
+            f"❌ Error: Invalid date format '{dt_str}'. Please use 'YYYY-MM-DD HH:MM'",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 def main():
     """Main CLI entry point."""
     args = parse_args()
 
-    # Handle body content (file or direct text)
-    body_content = args.body
-    if args.body.startswith("@"):
-        file_path = args.body[1:]
-        try:
-            with open(file_path, encoding="utf-8") as f:
-                body_content = f.read()
-        except Exception as e:
-            print(f"❌ Error reading body file '{file_path}': {e!s}", file=sys.stderr)
-            sys.exit(1)
+    safe_body = args.body or ""
+
+    # 1. Handle body content using a match case with a guard clause
+    match safe_body:
+        case body_text if body_text.startswith("@"):
+            file_path = body_text[1:]
+            try:
+                with open(file_path, encoding="utf-8") as f:
+                    body_content = f.read()
+            except Exception as e:
+                print(f"❌ Error reading body file '{file_path}': {e!s}", file=sys.stderr)
+                sys.exit(1)
+        case text:
+            body_content = text
 
     # Handle template selection
     template = None
@@ -102,15 +137,19 @@ def main():
             print(f"❌ Error loading template file '{template_path}': {e!s}", file=sys.stderr)
             sys.exit(1)
     else:
-        # Use built-in template mapping
-        template_map = {
-            "persian": TemplateType.PERSIAN,
-            "english": TemplateType.DEFAULT,
-            "minimal": "minimal",
-            "plain": TemplateType.PLAIN,
-            "none": TemplateType.PLAIN,
-        }
-        template = template_map.get(args.template, TemplateType.PERSIAN)
+        # 2. Use match-case instead of dictionary mapping for built-ins
+        match args.template:
+            case "persian" | "farsi" | "rtl" | "fa":
+                template = TemplateType.PERSIAN
+            case "default" | "english" | "ltr" | "en":
+                template = TemplateType.DEFAULT
+            case "minimal" | "simple":
+                template = "minimal"
+            case "plain" | "none":
+                template = TemplateType.PLAIN
+            case _:
+                # Default fallback if args.template is missing or unrecognized
+                template = TemplateType.DEFAULT
 
     # Process attachments with path expansion
     attachments = []
@@ -124,29 +163,63 @@ def main():
     # Send email
     try:
         with ExchangeEmailer(config_path=args.config, verbose=args.verbose) as emailer:
-            success = emailer.send_email(
-                subject=args.subject,
-                body=body_content,
-                recipients=args.to,
-                cc_recipients=args.cc,
-                bcc_recipients=args.bcc,
-                attachments=attachments,
-                template=template,
-                template_vars=args.template_vars,
-            )
+            # 🚀 BRANCH LOGIC: Is it a Meeting or an Email?
+            if args.meeting:
+                if not args.start or not args.end:
+                    print(
+                        "❌ Error: --start and --end are required when --meeting is used.",
+                        file=sys.stderr,
+                    )
+                    sys.exit(1)
 
-            if success:
-                print("✅ Email sent successfully!")
-                if args.verbose:
-                    print(f"   Recipients: {', '.join(args.to)}")
-                    if args.cc:
-                        print(f"   CC: {', '.join(args.cc)}")
-                    if args.bcc:
-                        print(f"   BCC: {len(args.bcc)} recipients")
-                sys.exit(0)
+                start_dt = parse_datetime(args.start)
+                end_dt = parse_datetime(args.end)
+
+                exchange_id = emailer.send_meeting_invite(
+                    subject=args.subject,
+                    start=start_dt,
+                    end=end_dt,
+                    body=body_content,
+                    required_attendees=args.to,
+                    optional_attendees=args.cc,
+                    location=args.location,
+                    template=template,
+                    template_vars=args.template_vars,
+                    is_response_requested=not args.no_rsvp,  # Flip the flag!
+                )
+
+                if exchange_id:
+                    print("✅ Calendar Invite sent successfully!")
+                    print(f"   Exchange ID: {exchange_id}")  # System admins can copy this ID!
+                    sys.exit(0)
+
             else:
-                print("❌ Failed to send email (no exception but returned False)", file=sys.stderr)
-                sys.exit(1)
+                # Standard Email
+                success = emailer.send_email(
+                    subject=args.subject,
+                    body=body_content,
+                    recipients=args.to,
+                    cc_recipients=args.cc,
+                    bcc_recipients=args.bcc,
+                    attachments=attachments,
+                    template=template,
+                    template_vars=args.template_vars,
+                )
+
+                if success:
+                    print("✅ Email sent successfully!")
+                    if args.verbose:
+                        print(f"   Recipients: {', '.join(args.to)}")
+                        if args.cc:
+                            print(f"   CC: {', '.join(args.cc)}")
+                        if args.bcc:
+                            print(f"   BCC: {len(args.bcc)} recipients")
+                    sys.exit(0)
+                else:
+                    print(
+                        "❌ Failed to send email (no exception but returned False)", file=sys.stderr
+                    )
+                    sys.exit(1)
 
     except ExchangeEmailerError as e:
         print(f"❌ {type(e).__name__}: {e!s}", file=sys.stderr)
