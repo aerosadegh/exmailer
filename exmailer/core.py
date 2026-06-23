@@ -28,6 +28,10 @@ from exchangelib.items import (
     SEND_ONLY_TO_CHANGED,
     SEND_TO_ALL_AND_SAVE_COPY,
 )
+from exchangelib.items import (
+    SEND_ONLY_TO_CHANGED,
+    SEND_TO_ALL_AND_SAVE_COPY,
+)
 from exchangelib.protocol import BaseProtocol
 from requests.adapters import HTTPAdapter
 from urllib3.poolmanager import PoolManager
@@ -75,7 +79,9 @@ class ExchangeEmailer:
         self,
         config_path: str | None = None,
         config: dict[str, Any] | None = None,
+        config: dict[str, Any] | None = None,
         verbose: bool = False,
+        log_file: str = "exchange_debug.log",
         log_file: str = "exchange_debug.log",
     ):
         """
@@ -123,6 +129,7 @@ class ExchangeEmailer:
                 level=logging.DEBUG,
                 format="%(asctime)s %(levelname)s %(message)s",
                 filename=log_file,
+                filename=log_file,
             )
 
         self.account = self._connect_to_exchange()
@@ -153,6 +160,8 @@ class ExchangeEmailer:
         try:
             full_username = f"{self.config['domain']}\\{self.config['username']}"
             credentials = Credentials(username=full_username, password=self.config["password"])
+            build_tuple = self.config.get("exchange_build") or (15, 1, 2248, 0)
+            version = Version(build=Build(*build_tuple))
             build_tuple = self.config.get("exchange_build") or (15, 1, 2248, 0)
             version = Version(build=Build(*build_tuple))
 
@@ -196,18 +205,34 @@ class ExchangeEmailer:
         except Exception as e:  # pragma: no cover
             raise ExchangeEmailConnectionError(f"Unexpected connection error: {e!s}") from e
 
+    # Safe marker used when injecting the body into a template.
+    # Must not appear in any template HTML or user content.
+    _BODY_PLACEHOLDER = "\x00__EXMAILER_BODY__\x00"
+
     def _render_body(
         self, body: str, template: str | TemplateType | None, template_vars: dict[str, Any] | None
     ) -> str:
-        """Helper method to share template rendering between Emails and Calendar Invites."""
+        """Render the email body, optionally wrapping it in an HTML template.
+
+        Template variables are substituted into the body first.  The body is
+        then injected into the template via a safe placeholder replacement so
+        that HTML/CSS braces inside the body cannot cause a KeyError.
+        """
         template_vars = template_vars or {}
-        template_vars["body"] = body.format(**template_vars)
+
+        # Substitute caller-provided variables into the body
+        if template_vars:
+            body = body.format(**template_vars)
 
         if template is None or template == TemplateType.PLAIN:
-            return body.format(**template_vars)
+            return body
 
         template_html = get_template(template)
-        return template_html.format(**template_vars)
+        # Step 1: Resolve CSS {{ }} escaping and place a safe marker for {body}
+        rendered = template_html.format(body=self._BODY_PLACEHOLDER)
+        # Step 2: Replace the marker with the actual body content.
+        # Using str.replace avoids any brace-related errors from HTML/CSS in the body.
+        return rendered.replace(self._BODY_PLACEHOLDER, body)
 
     def _ensure_timezone(self, dt: datetime.datetime) -> datetime.datetime:
         """Ensure the datetime is timezone aware to prevent Exchange Server rejection."""
@@ -225,6 +250,7 @@ class ExchangeEmailer:
         attachments: Sequence[str] | None = None,
         cc_recipients: Sequence[str] | None = None,
         bcc_recipients: Sequence[str] | None = None,
+        template: str | TemplateType | None = TemplateType.DEFAULT,
         template: str | TemplateType | None = TemplateType.DEFAULT,
         template_vars: dict[str, Any] | None = None,
         importance: Literal["Low", "Normal", "High"] = "Normal",
@@ -317,6 +343,7 @@ class ExchangeEmailer:
                     try:
                         with open(attachment["path"], "rb") as f:
                             content = f.read()  # Single read; validate_attachments skips this
+                            content = f.read()  # Single read; validate_attachments skips this
 
                         file_attachment = FileAttachment(
                             name=attachment["name"],
@@ -365,7 +392,7 @@ class ExchangeEmailer:
         required_attendees: Sequence[str] | None = None,
         optional_attendees: Sequence[str] | None = None,
         location: str = "",
-        template: str | TemplateType | None = TemplateType.PERSIAN,
+        template: str | TemplateType | None = TemplateType.DEFAULT,
         template_vars: dict[str, Any] | None = None,
         is_response_requested: bool = True,
     ) -> str:
@@ -422,62 +449,77 @@ class ExchangeEmailer:
         self,
         exchange_id: str,
         subject: str,
-        start: datetime.datetime,
-        end: datetime.datetime,
-        body: str = "",
-        required_attendees: Sequence[str] | None = None,
-        optional_attendees: Sequence[str] | None = None,
-        location: str = "",
-        template: str | TemplateType | None = TemplateType.PERSIAN,
-        template_vars: dict[str, Any] | None = None,
+        start,
+        end,
+        required_attendees: list[str] | None = None,
+        optional_attendees: list[str] | None = None,
+        body: str | None = None,
+        template: str | None = None,
+        location: str | None = None,
         is_response_requested: bool = True,
+        force_send_all: bool = False,
     ) -> bool:
-        """
-        Updates an existing meeting by its Exchange ID and notifies attendees.
+        """Updates an existing meeting invitation in Exchange.
+
+        This method modifies an existing calendar item. If `body` or `template`
+        is omitted, the existing meeting description is preserved safely without
+        overwriting it with a blank template. By default, updates are only sent
+        to attendees whose status has changed to prevent inbox spam.
 
         Args:
-            exchange_id: The unique ID returned when the meeting was created.
-            subject: The updated subject of the meeting.
-            start: The updated timezone-aware start time.
-            end: The updated timezone-aware end time.
-            body: The updated body content.
-            required_attendees: Updated sequence of required attendees.
-            optional_attendees: Updated sequence of optional attendees.
-            location: The updated meeting location.
-            template: The template to use for the updated body.
-            template_vars: Variables for dynamic injection into the template.
-            is_response_requested: If True, asks attendees to RSVP to the update.
+            exchange_id (str): The unique Exchange ID of the existing meeting.
+            subject (str): The new subject of the meeting.
+            start (datetime): The new start time (timezone-aware).
+            end (datetime): The new end time (timezone-aware).
+            required_attendees (list[str] | None, optional): List of required emails. Defaults to None.
+            optional_attendees (list[str] | None, optional): List of optional emails. Defaults to None.
+            body (str | None, optional): The new HTML body. If None, preserves existing. Defaults to None.
+            template (str | None, optional): The template to use. Defaults to None.
+            location (str | None, optional): The new location. Defaults to None.
+            is_response_requested (bool, optional): Whether to ask for RSVP. Defaults to True.
+            force_send_all (bool, optional): If True, sends an update email to ALL attendees,
+                even if their status hasn't changed. Defaults to False.
 
         Returns:
-            bool: True if the meeting was updated successfully, False if ID is missing.
+            bool: True if the update was successful, False if the ID is empty.
 
         Raises:
-            SendError: If the meeting update request fails.
+            SendError: If the Exchange server rejects the update or item is not found.
         """
+        # Guard clause to prevent crashing on empty IDs
         if not exchange_id:
             logger.warning("Update aborted: `exchange_id` is empty or None.")
             return False
 
         try:
             item = self.account.calendar.get(id=exchange_id)
-            formatted_body = self._render_body(body, template, template_vars)
 
+            item.subject = subject
             item.start = self._ensure_timezone(start)
             item.end = self._ensure_timezone(end)
-            item.subject = subject
-            item.body = HTMLBody(formatted_body)
-            item.location = location
-            item.required_attendees = required_attendees or []
-            item.optional_attendees = optional_attendees or []
             item.is_response_requested = is_response_requested
 
-            item.save(send_meeting_invitations="SendToAllAndSaveCopy")
-            logger.info(f"✅ Meeting '{subject}' updated successfully.")
+            if location is not None:
+                item.location = location
+
+            if body is not None:
+                item.body = HTMLBody(self._render_body(body, template, None))
+
+            if required_attendees is not None:
+                item.required_attendees = required_attendees
+
+            if optional_attendees is not None:
+                item.optional_attendees = optional_attendees
+
+            send_flag = SEND_TO_ALL_AND_SAVE_COPY if force_send_all else SEND_ONLY_TO_CHANGED
+
+            item.save(send_meeting_invitations=send_flag)
             return True
 
         except Exception as e:
-            logger.error(f"❌ Failed to update meeting {exchange_id}: {e!s}")
-            raise SendError(f"Failed to update meeting: {e!s}") from e
+            logger.error(f"Failed to update meeting invite {exchange_id}: {e}", exc_info=True)
+            # Raise the expected custom exception instead of returning False
+            raise SendError(f"Failed to update meeting invite {exchange_id}: {e}") from e
 
     def cancel_meeting_invite(self, exchange_id: str) -> bool:
         """

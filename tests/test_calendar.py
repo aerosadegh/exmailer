@@ -69,7 +69,6 @@ def test_update_meeting_invite_success(mock_exchange_connection, sample_config):
     """Test successful update of an existing meeting."""
     emailer = ExchangeEmailer(config=sample_config)
 
-    # Mock the retrieved calendar item
     mock_item = MagicMock()
     emailer.account.calendar.get = MagicMock(return_value=mock_item)
 
@@ -86,17 +85,42 @@ def test_update_meeting_invite_success(mock_exchange_connection, sample_config):
         is_response_requested=False,
     )
 
-    # Verify it fetched the correct item
     emailer.account.calendar.get.assert_called_once_with(id="existing_id_456")
 
-    # Verify item attributes were updated
+    # Verify all properties were updated successfully
     assert mock_item.subject == "Updated Sprint Planning"
     assert mock_item.start == start_time
     assert mock_item.end == end_time
     assert mock_item.required_attendees == ["team@company.com"]
     assert mock_item.is_response_requested is False
 
-    # Verify save was called correctly
+    # Assert that it uses the safer update flag by default
+    mock_item.save.assert_called_once_with(send_meeting_invitations="SendOnlyToChanged")
+    assert success is True
+
+
+def test_update_meeting_invite_force_send_all(mock_exchange_connection, sample_config):
+    """Test that force_send_all=True forces emails to everyone and body is safely preserved."""
+    emailer = ExchangeEmailer(config=sample_config)
+    mock_item = MagicMock()
+    # Set a dummy existing body to verify it doesn't get overwritten
+    mock_item.body = "Original Body"
+    emailer.account.calendar.get = MagicMock(return_value=mock_item)
+
+    start_time = datetime.datetime(2026, 6, 26, 10, 0, tzinfo=ZoneInfo("UTC"))
+
+    success = emailer.update_meeting_invite(
+        exchange_id="existing_id_456",
+        subject="Forced Update",
+        start=start_time,
+        end=start_time,
+        force_send_all=True,  # Using the new flag
+    )
+
+    # Assert the body was preserved because we didn't pass a new one
+    assert mock_item.body == "Original Body"
+
+    # Assert that it uses the aggressive update flag
     mock_item.save.assert_called_once_with(send_meeting_invitations="SendToAllAndSaveCopy")
     assert success is True
 
@@ -216,14 +240,14 @@ def test_update_and_cancel_with_empty_id(mock_exchange_connection, sample_config
 
     # Test Update with empty ID
     update_success = emailer.update_meeting_invite(
-        exchange_id="",  # 🚨 Empty ID
+        exchange_id="",
         subject="Empty ID Update",
         start=start_time,
         end=start_time,
     )
 
     # Test Cancel with empty ID
-    cancel_success = emailer.cancel_meeting_invite(exchange_id="")  # 🚨 Empty ID
+    cancel_success = emailer.cancel_meeting_invite(exchange_id="")
 
     # Both should immediately return False without calling the EWS server
     assert update_success is False
