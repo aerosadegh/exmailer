@@ -1,10 +1,11 @@
 import logging
-import mimetypes
+import os
 from collections.abc import (
     Iterator,
     Sequence,
 )
 from pathlib import Path
+from typing import TypedDict
 from typing import TypedDict
 
 logger = logging.getLogger(__name__)
@@ -20,17 +21,6 @@ class AttachmentData(TypedDict):
     path: Path
 
 
-# Types that are absent from or inconsistently reported by the stdlib mimetypes
-# module across platforms (e.g. Windows registry vs. Linux /etc/mime.types).
-# These entries take priority over whatever the OS reports.
-_EXTRA_MIME_TYPES: dict[str, str] = {
-    ".msg": "application/vnd.ms-outlook",
-    ".rtf": "application/rtf",
-    ".zip": "application/zip",  # Windows registry: application/x-zip-compressed
-    ".csv": "text/csv",  # Windows registry: application/vnd.ms-excel
-}
-
-
 def get_content_type(filename: str) -> str:
     """Return the MIME type for a filename using the stdlib mimetypes module."""
     ext = Path(filename).suffix.lower()
@@ -41,8 +31,15 @@ def get_content_type(filename: str) -> str:
 
 
 def validate_attachments(attachment_paths: Sequence[str] | None) -> Iterator[AttachmentData]:
+def validate_attachments(attachment_paths: Sequence[str] | None) -> Iterator[AttachmentData]:
     """
     Validate and prepare attachments for sending.
+
+    Args:
+        attachment_paths: A sequence (list, tuple) of file paths to attach.
+
+    Yields:
+        AttachmentData: A dictionary containing validated file metadata and binary content.
 
     Args:
         attachment_paths: A sequence (list, tuple) of file paths to attach.
@@ -52,6 +49,7 @@ def validate_attachments(attachment_paths: Sequence[str] | None) -> Iterator[Att
     """
     if not attachment_paths:
         return
+        return
 
     for path_str in attachment_paths:
         try:
@@ -60,9 +58,17 @@ def validate_attachments(attachment_paths: Sequence[str] | None) -> Iterator[Att
             # Reject directories or missing files
             if not path.is_file():
                 logger.warning(f"Skipping missing or invalid file: {path_str}")
+            # Reject directories or missing files
+            if not path.is_file():
+                logger.warning(f"Skipping missing or invalid file: {path_str}")
                 continue
 
             # Explicitly convert size to int to prevent mock leakage
+            size = int(path.stat().st_size)
+
+            if size == 0:
+                logger.warning(f"Skipping empty file: {path_str}")
+                continue
             size = int(path.stat().st_size)
 
             if size == 0:
@@ -78,14 +84,21 @@ def validate_attachments(attachment_paths: Sequence[str] | None) -> Iterator[Att
 
             content_type = get_content_type(path.name)
 
+            with open(path, "rb") as f:
+                content = f.read()
+
             yield AttachmentData(
                 name=path.name,
-                content=b"",  # Content is read once by the caller to avoid double I/O
+                content=content,
                 content_type=content_type,
                 size=size,
                 path=path,
             )
 
+        except PermissionError:
+            logger.error(f"Permission denied when accessing attachment: {path_str}")
+        except OSError as e:
+            logger.error(f"I/O error processing attachment {path_str}: {e}")
         except PermissionError:
             logger.error(f"Permission denied when accessing attachment: {path_str}")
         except OSError as e:

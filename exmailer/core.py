@@ -1,16 +1,19 @@
 """Core ExchangeEmailer class with flexible template system."""
 
 import datetime
+import datetime
 import logging
 import ssl
 from collections.abc import Sequence
 from typing import Any, Literal
+from zoneinfo import ZoneInfo
 from zoneinfo import ZoneInfo
 
 from exchangelib import (
     DELEGATE,
     Account,
     Build,
+    CalendarItem,
     CalendarItem,
     Configuration,
     Credentials,
@@ -86,6 +89,7 @@ class ExchangeEmailer:
         Examples:
             # Method 1: Programmatic config (recommended for scripts)
             ```python
+            ```python
             emailer = ExchangeEmailer(config={
                 "domain": "corp",
                 "username": "john.doe",
@@ -94,15 +98,20 @@ class ExchangeEmailer:
                 "email_domain": "corp.com"
             })
             ```
+            ```
 
             # Method 2: Config file
             ```python
+            ```python
             emailer = ExchangeEmailer(config_path="~/.config/exmailer/config.json")
+            ```
             ```
 
             # Method 3: Auto-discovery (looks in default locations)
             ```python
+            ```python
             emailer = ExchangeEmailer()
+            ```
             ```
         """
         self.verbose = verbose
@@ -187,34 +196,18 @@ class ExchangeEmailer:
         except Exception as e:  # pragma: no cover
             raise ExchangeEmailConnectionError(f"Unexpected connection error: {e!s}") from e
 
-    # Safe marker used when injecting the body into a template.
-    # Must not appear in any template HTML or user content.
-    _BODY_PLACEHOLDER = "\x00__EXMAILER_BODY__\x00"
-
     def _render_body(
         self, body: str, template: str | TemplateType | None, template_vars: dict[str, Any] | None
     ) -> str:
-        """Render the email body, optionally wrapping it in an HTML template.
-
-        Template variables are substituted into the body first.  The body is
-        then injected into the template via a safe placeholder replacement so
-        that HTML/CSS braces inside the body cannot cause a KeyError.
-        """
+        """Helper method to share template rendering between Emails and Calendar Invites."""
         template_vars = template_vars or {}
-
-        # Substitute caller-provided variables into the body
-        if template_vars:
-            body = body.format(**template_vars)
+        template_vars["body"] = body.format(**template_vars)
 
         if template is None or template == TemplateType.PLAIN:
-            return body
+            return body.format(**template_vars)
 
         template_html = get_template(template)
-        # Step 1: Resolve CSS {{ }} escaping and place a safe marker for {body}
-        rendered = template_html.format(body=self._BODY_PLACEHOLDER)
-        # Step 2: Replace the marker with the actual body content.
-        # Using str.replace avoids any brace-related errors from HTML/CSS in the body.
-        return rendered.replace(self._BODY_PLACEHOLDER, body)
+        return template_html.format(**template_vars)
 
     def _ensure_timezone(self, dt: datetime.datetime) -> datetime.datetime:
         """Ensure the datetime is timezone aware to prevent Exchange Server rejection."""
@@ -294,6 +287,7 @@ class ExchangeEmailer:
             # Get the appropriate template
             ## Apply template variables if provided
             formatted_body = self._render_body(body, template, template_vars)
+            formatted_body = self._render_body(body, template, template_vars)
 
             # Create message
             msg = Message(
@@ -301,6 +295,12 @@ class ExchangeEmailer:
                 subject=subject,
                 body=HTMLBody(formatted_body),
                 to_recipients=[Mailbox(email_address=email) for email in recipients],
+                cc_recipients=(
+                    [Mailbox(email_address=e) for e in cc_recipients] if cc_recipients else []
+                ),
+                bcc_recipients=(
+                    [Mailbox(email_address=e) for e in bcc_recipients] if bcc_recipients else []
+                ),
                 cc_recipients=(
                     [Mailbox(email_address=e) for e in cc_recipients] if cc_recipients else []
                 ),
@@ -365,7 +365,7 @@ class ExchangeEmailer:
         required_attendees: Sequence[str] | None = None,
         optional_attendees: Sequence[str] | None = None,
         location: str = "",
-        template: str | TemplateType | None = TemplateType.DEFAULT,
+        template: str | TemplateType | None = TemplateType.PERSIAN,
         template_vars: dict[str, Any] | None = None,
         is_response_requested: bool = True,
     ) -> str:
@@ -422,82 +422,62 @@ class ExchangeEmailer:
         self,
         exchange_id: str,
         subject: str,
-        start,
-        end,
-        required_attendees: list[str] | None = None,
-        optional_attendees: list[str] | None = None,
-        body: str | None = None,
-        template: str | None = None,
-        location: str | None = None,
+        start: datetime.datetime,
+        end: datetime.datetime,
+        body: str = "",
+        required_attendees: Sequence[str] | None = None,
+        optional_attendees: Sequence[str] | None = None,
+        location: str = "",
+        template: str | TemplateType | None = TemplateType.PERSIAN,
+        template_vars: dict[str, Any] | None = None,
         is_response_requested: bool = True,
-        send_only_to_changed: bool = False,
     ) -> bool:
-        """Updates an existing meeting invitation in Exchange.
-
-        This method modifies an existing calendar item. If `body` or `template`
-        is omitted, the existing meeting description is preserved safely without
-        overwriting it with a blank template. By default, updates are only sent
-        to attendees whose status has changed to prevent inbox spam.
+        """
+        Updates an existing meeting by its Exchange ID and notifies attendees.
 
         Args:
             exchange_id: The unique ID returned when the meeting was created.
             subject: The updated subject of the meeting.
             start: The updated timezone-aware start time.
             end: The updated timezone-aware end time.
-            body: The updated HTML or plain text body content.
-            required_attendees: Updated sequence of required email addresses.
-            optional_attendees: Updated sequence of optional email addresses.
-            location: The updated physical or virtual meeting location.
+            body: The updated body content.
+            required_attendees: Updated sequence of required attendees.
+            optional_attendees: Updated sequence of optional attendees.
+            location: The updated meeting location.
             template: The template to use for the updated body.
             template_vars: Variables for dynamic injection into the template.
             is_response_requested: If True, asks attendees to RSVP to the update.
-            send_only_to_changed: If True, Exchange only emails added/removed attendees.
-                                  If False, Exchange emails all attendees. Default is False.
 
         Returns:
-            bool: True if the meeting was successfully updated and dispatched.
+            bool: True if the meeting was updated successfully, False if ID is missing.
 
         Raises:
-            ValueError: If the start time is equal to or after the end time, or if subject is empty.
-            SendError: If the meeting update fails during the network request to Exchange.
+            SendError: If the meeting update request fails.
         """
-        # 1. Defensive Boundary Checks (Fail Fast)
-        if not exchange_id or not exchange_id.strip():
-            logger.warning("Update aborted: 'exchange_id' must be a non-empty string.")
+        if not exchange_id:
+            logger.warning("Update aborted: `exchange_id` is empty or None.")
             return False
 
-        if not subject or not subject.strip():
-            raise ValueError("Meeting subject cannot be empty or solely whitespace.")
-
-        if start >= end:
-            raise ValueError("Meeting start time must be strictly before the end time.")
-
         try:
-            # 2. State Retrieval
             item = self.account.calendar.get(id=exchange_id)
+            formatted_body = self._render_body(body, template, template_vars)
 
-            # 3. State Mutation
             item.start = self._ensure_timezone(start)
             item.end = self._ensure_timezone(end)
+            item.subject = subject
+            item.body = HTMLBody(formatted_body)
+            item.location = location
+            item.required_attendees = required_attendees or []
+            item.optional_attendees = optional_attendees or []
             item.is_response_requested = is_response_requested
 
-            # 4. Dispatch Strategy Resolution
-            dispatch_mode = (
-                "SendToChangedAndSaveCopy" if send_only_to_changed else "SendToAllAndSaveCopy"
-            )
-
-            # 5. Commit and Transmit
-            item.save(send_meeting_invitations=dispatch_mode)
-            logger.info(f"✅ Meeting '{subject}' updated successfully. Mode: {dispatch_mode}")
+            item.save(send_meeting_invitations="SendToAllAndSaveCopy")
+            logger.info(f"✅ Meeting '{subject}' updated successfully.")
             return True
 
-        except ValueError:
-            # Re-raise explicit validation constraints so they aren't masked
-            raise
-        except Exception as error:
-            # Broad catch mapped to specific domain exception
-            logger.error(f"❌ Failed to update meeting {exchange_id}: {error!s}")
-            raise SendError(f"Failed to update meeting: {error!s}") from error
+        except Exception as e:
+            logger.error(f"❌ Failed to update meeting {exchange_id}: {e!s}")
+            raise SendError(f"Failed to update meeting: {e!s}") from e
 
     def cancel_meeting_invite(self, exchange_id: str) -> bool:
         """
