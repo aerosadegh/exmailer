@@ -51,7 +51,8 @@ def test_send_email_with_persian_template(mock_exchange_connection, sample_confi
         bcc_recipients=["recipient@company.com"],
         template=TemplateType.PERSIAN,
     )
-    assert validate_attachments([]) == []
+    # Wrap the generator in list() to consume and compare it
+    assert list(validate_attachments([])) == []
 
     assert success is True
 

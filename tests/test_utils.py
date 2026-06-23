@@ -30,7 +30,8 @@ def test_validate_attachments_existing_files(tmp_path):
     medium_file = tmp_path / "medium.xlsx"
     medium_file.write_bytes(b"b" * (5 * 1024 * 1024))  # 5MB
 
-    attachments = validate_attachments([str(small_file), str(medium_file)])
+    # Consume the generator into a list for assertion
+    attachments = list(validate_attachments([str(small_file), str(medium_file)]))
 
     assert len(attachments) == 2
     assert attachments[0]["name"] == "small.pdf"
@@ -46,8 +47,11 @@ def test_validate_attachments_skips_missing_files(tmp_path, caplog):
     existing = tmp_path / "exists.txt"
     existing.write_text("content")
 
-    attachments = validate_attachments(
-        [str(existing), str(tmp_path / "missing.pdf"), str(tmp_path / "also_missing.docx")]
+    # Consume the generator into a list
+    attachments = list(
+        validate_attachments(
+            [str(existing), str(tmp_path / "missing.pdf"), str(tmp_path / "also_missing.docx")]
+        )
     )
 
     assert len(attachments) == 1
@@ -64,7 +68,8 @@ def test_validate_attachments_skips_empty_files(tmp_path, caplog):
     non_empty = tmp_path / "non_empty.txt"
     non_empty.write_text("content")
 
-    attachments = validate_attachments([str(empty), str(non_empty)])
+    # Consume the generator into a list
+    attachments = list(validate_attachments([str(empty), str(non_empty)]))
 
     assert len(attachments) == 1
     assert attachments[0]["name"] == "non_empty.txt"
@@ -76,7 +81,8 @@ def test_validate_attachments_large_file_warning(tmp_path, caplog):
     large_file = tmp_path / "large.pdf"
     large_file.write_bytes(b"a" * (26 * 1024 * 1024))  # 26MB > 25MB limit
 
-    attachments = validate_attachments([str(large_file)])
+    # Consume the generator into a list
+    attachments = list(validate_attachments([str(large_file)]))
 
     assert len(attachments) == 1
     assert "26.0MB" in caplog.text
