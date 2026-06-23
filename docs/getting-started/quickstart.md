@@ -16,14 +16,20 @@ with ExchangeEmailer() as emailer:
         body="This is a test email sent via Microsoft Exchange.",
         recipients=["colleague@company.com"]
     )
+
 ```
 
 ## Using the CLI
+
 ExMailer provides a powerful command-line interface for quick tasks or shell scripting.
 
-```Bash
+```bash
 # Basic command to send an email
 exmailer --subject "Test Subject" --body "Hello World" --to user@company.com
+
+# Basic command to schedule a calendar meeting
+exmailer --meeting --subject "Deploy Sync" --start "2026-06-25 10:00" --end "2026-06-25 11:00" --to team@company.com
+
 ```
 
 Note: For the CLI to work, ensure you have an `exmailer.json` file in your current directory or your environment variables set.

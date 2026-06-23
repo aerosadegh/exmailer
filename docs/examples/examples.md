@@ -63,7 +63,7 @@ def send_email_with_attachments() -> None:
     # Define file paths using pathlib for cross-platform reliability
     report_file: Path = Path("./reports/monthly_stats.pdf")
     log_file: Path = Path("logs/system.log")
-    
+
     # Convert Paths to strings as required by exmailer
     attachments: List[str] = [str(report_file), str(log_file)]
 
@@ -125,7 +125,7 @@ def send_template_via_string_identifier() -> None:
             subject="تست",
             body="<p>متن پیام</p>",
             recipients=["user@company.com"],
-            template="persian", 
+            template="persian",
         )
 
 if __name__ == "__main__":
@@ -280,7 +280,7 @@ def send_bilingual_notification() -> None:
 
 def send_auto_detected_language_email() -> None:
     """Automatically detects Persian characters and routes to the correct template."""
-    
+
     def _smart_dispatch(subject: str, body: str, recipients: list) -> None:
         """Internal helper to detect language and send."""
         has_persian = bool(PERSIAN_CHAR_PATTERN.search(subject + body))
@@ -296,18 +296,73 @@ def send_auto_detected_language_email() -> None:
 
     # Dispatching test emails
     _smart_dispatch(
-        subject="سلام", 
-        body="این یک پیام فارسی است", 
+        subject="سلام",
+        body="این یک پیام فارسی است",
         recipients=["user@company.com"]
     )
-    
+
     _smart_dispatch(
-        subject="Hello", 
-        body="This is an English message", 
+        subject="Hello",
+        body="This is an English message",
         recipients=["user@company.com"]
     )
 
 if __name__ == "__main__":
     send_bilingual_notification()
     send_auto_detected_language_email()
+```
+
+## 6. Calendar and Meeting Management
+
+ExMailer allows you to schedule, update, and cancel Exchange calendar meetings natively, complete with template support and timezone handling.
+
+```python
+"""
+Calendar Management: Scheduling, updating, and cancelling meetings.
+"""
+import datetime
+from zoneinfo import ZoneInfo
+from exmailer import ExchangeEmailer, TemplateType
+
+def manage_corporate_meeting() -> None:
+    """Full lifecycle of a meeting invite."""
+
+    # 1. Define strict timezone-aware dates
+    tehran_tz = ZoneInfo("Asia/Tehran")
+    start_dt = datetime.datetime(2026, 6, 25, 14, 0, tzinfo=tehran_tz)
+    end_dt = datetime.datetime(2026, 6, 25, 15, 0, tzinfo=tehran_tz)
+
+    with ExchangeEmailer() as emailer:
+        # Step 1: Create the Meeting
+        exchange_id = emailer.send_meeting_invite(
+            subject="جلسه برنامه‌ریزی",
+            start=start_dt,
+            end=end_dt,
+            body="<p>لطفاً پیش از جلسه گزارش‌ها را مطالعه کنید.</p>",
+            required_attendees=["team@company.com"],
+            location="اتاق کنفرانس الف",
+            template=TemplateType.PERSIAN,  # Meetings support templates too!
+            is_response_requested=True
+        )
+        print(f"Meeting created! ID: {exchange_id}")
+
+        # Step 2: Update the Meeting (e.g., changing the time)
+        new_end_dt = datetime.datetime(2026, 6, 25, 15, 30, tzinfo=tehran_tz)
+
+        emailer.update_meeting_invite(
+            exchange_id=exchange_id,
+            subject="جلسه برنامه‌ریزی (تمدید شده)",
+            start=start_dt,
+            end=new_end_dt,
+            required_attendees=["team@company.com"]
+        )
+        print("Meeting updated successfully.")
+
+        # Step 3: Cancel the Meeting
+        emailer.cancel_meeting_invite(exchange_id=exchange_id)
+        print("Meeting canceled.")
+
+if __name__ == "__main__":
+    manage_corporate_meeting()
+
 ```

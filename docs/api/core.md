@@ -41,6 +41,33 @@ Sends an email through the Exchange server.
 | `template` | `TemplateType \| str \| None` | `TemplateType.DEFAULT` | The template to wrap the body in. |
 | `template_vars` | `dict[str, Any] \| None` | `None` | Variables for f-string style replacement. |
 
+
+#### `send_meeting_invite(...) -> str`
+::: core.ExchangeEmailer.send_meeting_invite
+    handler: python
+    options:
+        show_root_heading: true
+        show_source: true
+        show_bases: true
+        members: ["!^[A-Z]+$"]
+
+#### `update_meeting_invite(...) -> bool`
+::: core.ExchangeEmailer.update_meeting_invite
+    handler: python
+    options:
+        show_root_heading: true
+        show_source: true
+        show_bases: true
+        members: ["!^[A-Z]+$"]
+
+#### `cancel_meeting_invite(...) -> bool`
+::: core.ExchangeEmailer.cancel_meeting_invite
+    handler: python
+    options:
+        show_root_heading: true
+        show_source: true
+        show_bases: true
+        members: ["!^[A-Z]+$"]
 ---
 
 
