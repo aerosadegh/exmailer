@@ -1,6 +1,7 @@
 """Tests for core ExchangeEmailer Calendar/Meeting functionality."""
 
 import datetime
+from typing import Any
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
@@ -193,13 +194,14 @@ def test_update_meeting_failure_raises_send_error(mock_exchange_connection, samp
     emailer.account.calendar.get = MagicMock(side_effect=Exception("Item not found"))
 
     start_time = datetime.datetime(2026, 6, 25, 14, 0, tzinfo=ZoneInfo("UTC"))
+    end_time = datetime.datetime(2026, 6, 25, 15, 0, tzinfo=ZoneInfo("UTC"))
 
     with pytest.raises(SendError) as exc_info:
         emailer.update_meeting_invite(
             exchange_id="invalid_id",
             subject="Will Fail",
             start=start_time,
-            end=start_time,
+            end=end_time,
         )
 
     assert "Item not found" in str(exc_info.value)
@@ -350,3 +352,92 @@ def test_domain_rule_safe_html_injection(
     # Verify the raw HTML was preserved and safely wrapped in the EWS HTMLBody object
     assert isinstance(kwargs["body"], HTMLBody)
     assert complex_html in str(kwargs["body"])
+
+
+def test_update_meeting_invite_dispatch_mode_changed(
+    mock_exchange_connection: dict[str, Any], sample_config: dict[str, Any]
+) -> None:
+    """
+    Test that the send_only_to_changed toggle correctly evaluates the EWS dispatch mode.
+
+    Args:
+        mock_exchange_connection: Fixture containing mocked Exchange endpoints.
+        sample_config: Fixture containing valid basic configuration.
+    """
+    emailer = ExchangeEmailer(config=sample_config)
+
+    # Isolate the in-memory item
+    mock_item = MagicMock()
+    emailer.account.calendar.get = MagicMock(return_value=mock_item)
+
+    start_time = datetime.datetime(2026, 6, 26, 10, 0, tzinfo=ZoneInfo("UTC"))
+    end_time = datetime.datetime(2026, 6, 26, 11, 0, tzinfo=ZoneInfo("UTC"))
+
+    # Execute the update with the new toggle engaged
+    success = emailer.update_meeting_invite(
+        exchange_id="valid_id_123",
+        subject="Surgically Updated Sync",
+        start=start_time,
+        end=end_time,
+        send_only_to_changed=True,
+    )
+
+    assert success is True
+    # Assert the correct granular flag was passed to the Exchange server
+    mock_item.save.assert_called_once_with(send_meeting_invitations="SendToChangedAndSaveCopy")
+
+
+def test_update_meeting_invite_empty_subject_raises_value_error(
+    sample_config: dict[str, Any],
+) -> None:
+    """
+    Test that providing an empty or whitespace-only subject fails fast.
+
+    Args:
+        sample_config: Fixture containing valid basic configuration.
+    """
+    emailer = ExchangeEmailer(config=sample_config)
+
+    start_time = datetime.datetime(2026, 6, 26, 10, 0, tzinfo=ZoneInfo("UTC"))
+    end_time = datetime.datetime(2026, 6, 26, 11, 0, tzinfo=ZoneInfo("UTC"))
+
+    with pytest.raises(ValueError, match="Meeting subject cannot be empty"):
+        emailer.update_meeting_invite(
+            exchange_id="valid_id_123",
+            subject="   ",  # Defensive check against whitespace bypassing
+            start=start_time,
+            end=end_time,
+        )
+
+
+def test_update_meeting_invite_invalid_chronology_raises_value_error(
+    sample_config: dict[str, Any],
+) -> None:
+    """
+    Test that invalid chronological boundaries (start >= end) are caught locally.
+
+    Args:
+        sample_config: Fixture containing valid basic configuration.
+    """
+    emailer = ExchangeEmailer(config=sample_config)
+
+    start_time = datetime.datetime(2026, 6, 26, 12, 0, tzinfo=ZoneInfo("UTC"))
+    end_time = datetime.datetime(2026, 6, 26, 11, 0, tzinfo=ZoneInfo("UTC"))  # 1 hour BEFORE start
+
+    # Scenario A: Start time is after end time
+    with pytest.raises(ValueError, match="strictly before the end time"):
+        emailer.update_meeting_invite(
+            exchange_id="valid_id_123",
+            subject="Time Travel Sync",
+            start=start_time,
+            end=end_time,
+        )
+
+    # Scenario B: Start time equals end time (Zero-duration boundary)
+    with pytest.raises(ValueError, match="strictly before the end time"):
+        emailer.update_meeting_invite(
+            exchange_id="valid_id_123",
+            subject="Instantaneous Sync",
+            start=start_time,
+            end=start_time,
+        )

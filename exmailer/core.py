@@ -430,7 +430,7 @@ class ExchangeEmailer:
         template: str | None = None,
         location: str | None = None,
         is_response_requested: bool = True,
-        force_send_all: bool = False,
+        send_only_to_changed: bool = False,
     ) -> bool:
         """Updates an existing meeting invitation in Exchange.
 
@@ -440,59 +440,64 @@ class ExchangeEmailer:
         to attendees whose status has changed to prevent inbox spam.
 
         Args:
-            exchange_id (str): The unique Exchange ID of the existing meeting.
-            subject (str): The new subject of the meeting.
-            start (datetime): The new start time (timezone-aware).
-            end (datetime): The new end time (timezone-aware).
-            required_attendees (list[str] | None, optional): List of required emails. Defaults to None.
-            optional_attendees (list[str] | None, optional): List of optional emails. Defaults to None.
-            body (str | None, optional): The new HTML body. If None, preserves existing. Defaults to None.
-            template (str | None, optional): The template to use. Defaults to None.
-            location (str | None, optional): The new location. Defaults to None.
-            is_response_requested (bool, optional): Whether to ask for RSVP. Defaults to True.
-            force_send_all (bool, optional): If True, sends an update email to ALL attendees,
-                even if their status hasn't changed. Defaults to False.
+            exchange_id: The unique ID returned when the meeting was created.
+            subject: The updated subject of the meeting.
+            start: The updated timezone-aware start time.
+            end: The updated timezone-aware end time.
+            body: The updated HTML or plain text body content.
+            required_attendees: Updated sequence of required email addresses.
+            optional_attendees: Updated sequence of optional email addresses.
+            location: The updated physical or virtual meeting location.
+            template: The template to use for the updated body.
+            template_vars: Variables for dynamic injection into the template.
+            is_response_requested: If True, asks attendees to RSVP to the update.
+            send_only_to_changed: If True, Exchange only emails added/removed attendees.
+                                  If False, Exchange emails all attendees. Default is False.
 
         Returns:
-            bool: True if the update was successful, False if the ID is empty.
+            bool: True if the meeting was successfully updated and dispatched.
 
         Raises:
-            SendError: If the Exchange server rejects the update or item is not found.
+            ValueError: If the start time is equal to or after the end time, or if subject is empty.
+            SendError: If the meeting update fails during the network request to Exchange.
         """
-        # Guard clause to prevent crashing on empty IDs
-        if not exchange_id:
-            logger.warning("Update aborted: `exchange_id` is empty or None.")
+        # 1. Defensive Boundary Checks (Fail Fast)
+        if not exchange_id or not exchange_id.strip():
+            logger.warning("Update aborted: 'exchange_id' must be a non-empty string.")
             return False
 
+        if not subject or not subject.strip():
+            raise ValueError("Meeting subject cannot be empty or solely whitespace.")
+
+        if start >= end:
+            raise ValueError("Meeting start time must be strictly before the end time.")
+
         try:
+            # 2. State Retrieval
             item = self.account.calendar.get(id=exchange_id)
 
-            item.subject = subject
+            # 3. State Mutation
             item.start = self._ensure_timezone(start)
             item.end = self._ensure_timezone(end)
             item.is_response_requested = is_response_requested
 
-            if location is not None:
-                item.location = location
+            # 4. Dispatch Strategy Resolution
+            dispatch_mode = (
+                "SendToChangedAndSaveCopy" if send_only_to_changed else "SendToAllAndSaveCopy"
+            )
 
-            if body is not None:
-                item.body = HTMLBody(self._render_body(body, template, None))
-
-            if required_attendees is not None:
-                item.required_attendees = required_attendees
-
-            if optional_attendees is not None:
-                item.optional_attendees = optional_attendees
-
-            send_flag = SEND_TO_ALL_AND_SAVE_COPY if force_send_all else SEND_ONLY_TO_CHANGED
-
-            item.save(send_meeting_invitations=send_flag)
+            # 5. Commit and Transmit
+            item.save(send_meeting_invitations=dispatch_mode)
+            logger.info(f"✅ Meeting '{subject}' updated successfully. Mode: {dispatch_mode}")
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to update meeting invite {exchange_id}: {e}", exc_info=True)
-            # Raise the expected custom exception instead of returning False
-            raise SendError(f"Failed to update meeting invite {exchange_id}: {e}") from e
+        except ValueError:
+            # Re-raise explicit validation constraints so they aren't masked
+            raise
+        except Exception as error:
+            # Broad catch mapped to specific domain exception
+            logger.error(f"❌ Failed to update meeting {exchange_id}: {error!s}")
+            raise SendError(f"Failed to update meeting: {error!s}") from error
 
     def cancel_meeting_invite(self, exchange_id: str) -> bool:
         """
