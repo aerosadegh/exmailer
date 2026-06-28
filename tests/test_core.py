@@ -1,6 +1,9 @@
 """Tests for core ExchangeEmailer functionality (with mocked Exchange server)."""
 
+import datetime
 import ssl
+from unittest.mock import MagicMock
+from zoneinfo import ZoneInfo
 
 import pytest
 from exchangelib.protocol import BaseProtocol
@@ -166,6 +169,42 @@ def test_authentication_failure_raises_error(mock_exchange_connection, sample_co
         ExchangeEmailer(config=sample_config)
 
     assert "Authentication failed" in str(exc_info.value)
+
+
+def test_update_meeting_sets_location(mock_exchange_connection, sample_config):
+    """Test that update_meeting_invite applies location when provided (L476)."""
+    emailer = ExchangeEmailer(config=sample_config)
+    mock_item = MagicMock()
+    emailer.account.calendar.get = MagicMock(return_value=mock_item)
+
+    t = datetime.datetime(2026, 7, 1, 10, 0, tzinfo=ZoneInfo("UTC"))
+    emailer.update_meeting_invite(
+        exchange_id="abc",
+        subject="Meeting",
+        start=t,
+        end=t,
+        location="Room 42",
+    )
+
+    assert mock_item.location == "Room 42"
+
+
+def test_update_meeting_sets_optional_attendees(mock_exchange_connection, sample_config):
+    """Test that update_meeting_invite applies optional_attendees when provided (L485)."""
+    emailer = ExchangeEmailer(config=sample_config)
+    mock_item = MagicMock()
+    emailer.account.calendar.get = MagicMock(return_value=mock_item)
+
+    t = datetime.datetime(2026, 7, 1, 10, 0, tzinfo=ZoneInfo("UTC"))
+    emailer.update_meeting_invite(
+        exchange_id="abc",
+        subject="Meeting",
+        start=t,
+        end=t,
+        optional_attendees=["guest@company.com"],
+    )
+
+    assert mock_item.optional_attendees == ["guest@company.com"]
 
 
 def test_connection_failure_raises_error(mock_exchange_connection, sample_config):

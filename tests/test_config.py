@@ -420,6 +420,39 @@ class TestSecurityAndEdgeCases:
             finally:
                 os.chdir(original_cwd)
 
+    def test_whitespace_yaml_file_uses_fallback(self, tmp_path, minimal_config_env):
+        """Test that a whitespace-only YAML file falls back to other sources (L93)."""
+        yaml_file = tmp_path / "empty.yaml"
+        yaml_file.write_text("   ")
+
+        mock_yaml = MagicMock()
+        with patch.dict(sys.modules, {"yaml": mock_yaml}):
+            config = load_config(str(yaml_file))
+
+        assert config["domain"] == "company"
+        # safe_load must NOT be called — the whitespace check short-circuits
+        mock_yaml.safe_load.assert_not_called()
+
+    def test_malformed_yaml_raises_configuration_error(self, tmp_path):
+        """Test that malformed YAML content raises ConfigurationError (L99-100)."""
+        yaml_file = tmp_path / "bad.yaml"
+        yaml_file.write_text("key: value")
+
+        mock_yaml = MagicMock()
+        mock_yaml.safe_load.side_effect = Exception("YAML syntax error")
+
+        with patch.dict(sys.modules, {"yaml": mock_yaml}):
+            with pytest.raises(ConfigurationError) as exc_info:
+                load_config(str(yaml_file))
+
+        assert "Invalid YAML" in str(exc_info.value)
+
+    def test_load_config_without_dotenv_installed(self, minimal_config_env):
+        """Test that config loading works even when python-dotenv is not installed (L119-120)."""
+        with patch.dict(sys.modules, {"dotenv": None}):
+            config = load_config()
+        assert config["domain"] == "company"
+
     def test_config_with_extra_fields_ignored(self, tmp_path):
         config_file = tmp_path / "config.json"
         config_file.write_text(
@@ -437,3 +470,70 @@ class TestSecurityAndEdgeCases:
         config = load_config(str(config_file))
         assert config["domain"] == "test"
         assert "extra" not in config
+
+
+class TestParseBoolEnvAndNormalization:
+    """Tests for _parse_bool_env and _normalize_config edge cases."""
+
+    def test_exchange_save_copy_true_values(self, minimal_config_env):
+        """Test EXCHANGE_SAVE_COPY truthy strings map to True (L138-140)."""
+        for value in ("true", "1", "yes", "on", "y"):
+            os.environ["EXCHANGE_SAVE_COPY"] = value
+            config = load_config()
+            assert config["save_copy"] is True, f"Expected True for '{value}'"
+
+    def test_exchange_save_copy_false_values(self, minimal_config_env):
+        """Test EXCHANGE_SAVE_COPY falsy strings map to False (L141-142)."""
+        for value in ("false", "0", "no", "off", "n"):
+            os.environ["EXCHANGE_SAVE_COPY"] = value
+            config = load_config()
+            assert config["save_copy"] is False, f"Expected False for '{value}'"
+
+    def test_exchange_save_copy_ambiguous_falls_back_to_default(self, minimal_config_env):
+        """Test that an unrecognised EXCHANGE_SAVE_COPY value falls back to the default (L143)."""
+        os.environ["EXCHANGE_SAVE_COPY"] = "maybe"
+        config = load_config()
+        # _parse_bool_env returns None → default True is applied
+        assert config["save_copy"] is True
+
+    def test_normalize_config_non_dict_raises(self):
+        """Test that passing a non-dict to _normalize_config raises ConfigurationError (L149)."""
+        from exmailer.config import _normalize_config
+
+        with pytest.raises(ConfigurationError) as exc_info:
+            _normalize_config("not a dict")
+        assert "expected dict" in str(exc_info.value).lower()
+
+    def test_save_copy_integer_coerced_to_bool(self, tmp_path):
+        """Test that integer save_copy values are coerced via bool() (L175)."""
+        config_file = tmp_path / "int_save.json"
+        config_file.write_text(
+            json.dumps(
+                {
+                    "domain": "test",
+                    "username": "u",
+                    "password": "p",
+                    "server": "s.com",
+                    "email_domain": "test.com",
+                    "save_copy": 1,
+                }
+            )
+        )
+        config = load_config(str(config_file))
+        # int 1 is not a bool and not a str → bool(1) = True
+        assert config["save_copy"] is True
+
+        config_file.write_text(
+            json.dumps(
+                {
+                    "domain": "test",
+                    "username": "u",
+                    "password": "p",
+                    "server": "s.com",
+                    "email_domain": "test.com",
+                    "save_copy": 0,
+                }
+            )
+        )
+        config = load_config(str(config_file))
+        assert config["save_copy"] is False

@@ -705,6 +705,141 @@ def test_cli_meeting_warns_on_bcc(mock_emailer_cls, capsys):
     assert "--bcc is not supported for meeting invites" in capsys.readouterr().err
 
 
+# ---------------------------------------------------------------------------
+# Verbose output paths
+# ---------------------------------------------------------------------------
+
+
+@patch("exmailer.cli.ExchangeEmailer")
+def test_cli_verbose_template_file_prints_loaded(mock_emailer_cls, tmp_path, capsys):
+    """Test that --verbose prints a confirmation when a template file is loaded."""
+    mock_emailer = MagicMock()
+    mock_emailer_cls.return_value.__enter__.return_value = mock_emailer
+    mock_emailer.send_email.return_value = True
+
+    template_file = tmp_path / "t.html"
+    template_file.write_text("<html>{body}</html>", encoding="utf-8")
+
+    test_args = [
+        "exmailer",
+        "--subject",
+        "Test",
+        "--body",
+        "Body",
+        "--to",
+        "u@c.com",
+        "--template-file",
+        str(template_file),
+        "--verbose",
+    ]
+    with patch.object(sys, "argv", test_args):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+    assert exc_info.value.code == 0
+    assert "Loaded custom template" in capsys.readouterr().out
+
+
+@patch("exmailer.cli.ExchangeEmailer")
+def test_cli_template_file_read_error(mock_emailer_cls, tmp_path):
+    """Test exit 1 when the template file cannot be read (e.g. I/O error)."""
+    template_file = tmp_path / "t.html"
+    template_file.write_text("<html>{body}</html>", encoding="utf-8")
+
+    test_args = [
+        "exmailer",
+        "--subject",
+        "Test",
+        "--body",
+        "Body",
+        "--to",
+        "u@c.com",
+        "--template-file",
+        str(template_file),
+    ]
+    with patch("builtins.open", side_effect=OSError("disk read error")):
+        with patch.object(sys, "argv", test_args):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+    assert exc_info.value.code == 1
+
+
+@patch("exmailer.cli.ExchangeEmailer")
+def test_cli_verbose_shows_cc_and_bcc_counts(mock_emailer_cls, capsys):
+    """Test that --verbose prints CC addresses and BCC count after a successful send."""
+    mock_emailer = MagicMock()
+    mock_emailer_cls.return_value.__enter__.return_value = mock_emailer
+    mock_emailer.send_email.return_value = True
+
+    test_args = [
+        "exmailer",
+        "--subject",
+        "Test",
+        "--body",
+        "Body",
+        "--to",
+        "to@c.com",
+        "--cc",
+        "cc@c.com",
+        "--bcc",
+        "bcc1@c.com",
+        "bcc2@c.com",
+        "--verbose",
+    ]
+    with patch.object(sys, "argv", test_args):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+    assert exc_info.value.code == 0
+    out = capsys.readouterr().out
+    assert "CC:" in out
+    assert "BCC: 2 recipients" in out
+
+
+@patch("exmailer.cli.ExchangeEmailer")
+def test_cli_unexpected_exception_exits_1(mock_emailer_cls):
+    """Test that a non-ExchangeEmailerError exception still exits with code 1."""
+    mock_emailer = MagicMock()
+    mock_emailer_cls.return_value.__enter__.return_value = mock_emailer
+    mock_emailer.send_email.side_effect = RuntimeError("something broke internally")
+
+    test_args = [
+        "exmailer",
+        "--subject",
+        "Test",
+        "--body",
+        "Body",
+        "--to",
+        "u@c.com",
+    ]
+    with patch.object(sys, "argv", test_args):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+    assert exc_info.value.code == 1
+
+
+@patch("exmailer.cli.ExchangeEmailer")
+def test_cli_unexpected_exception_verbose_prints_traceback(mock_emailer_cls, capsys):
+    """Test that --verbose prints a full traceback on unexpected exceptions."""
+    mock_emailer = MagicMock()
+    mock_emailer_cls.return_value.__enter__.return_value = mock_emailer
+    mock_emailer.send_email.side_effect = RuntimeError("something broke internally")
+
+    test_args = [
+        "exmailer",
+        "--subject",
+        "Test",
+        "--body",
+        "Body",
+        "--to",
+        "u@c.com",
+        "--verbose",
+    ]
+    with patch.object(sys, "argv", test_args):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+    assert exc_info.value.code == 1
+    assert "RuntimeError" in capsys.readouterr().err
+
+
 @patch("exmailer.cli.ExchangeEmailer")
 def test_cli_meeting_warns_on_attachments(mock_emailer_cls, tmp_path, capsys):
     """Test that a warning is printed when --attachments is passed with --meeting."""

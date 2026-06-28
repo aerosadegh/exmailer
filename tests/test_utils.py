@@ -94,6 +94,43 @@ def test_validate_attachments_large_file_warning(tmp_path, caplog):
     assert "exceeds 25.0MB limit".lower() in caplog.text.lower()
 
 
+def test_validate_attachments_permission_error(tmp_path, caplog):
+    """Test that a PermissionError on stat() is caught and logged (L91-92)."""
+    from pathlib import Path
+    from unittest.mock import patch
+
+    f = tmp_path / "protected.pdf"
+    f.write_bytes(b"content")
+
+    with (
+        patch.object(Path, "is_file", return_value=True),
+        patch.object(Path, "stat", side_effect=PermissionError("permission denied")),
+    ):
+        result = list(validate_attachments([str(f)]))
+
+    assert result == []
+    assert "Permission denied" in caplog.text
+
+
+def test_validate_attachments_os_error(tmp_path, caplog):
+    """Test that a generic OSError on stat() is caught and logged (L93-94)."""
+    from pathlib import Path
+    from unittest.mock import patch
+
+    f = tmp_path / "broken.pdf"
+    f.write_bytes(b"content")
+
+    # OSError (not a PermissionError subclass) triggers the second except branch
+    with (
+        patch.object(Path, "is_file", return_value=True),
+        patch.object(Path, "stat", side_effect=OSError("disk read error")),
+    ):
+        result = list(validate_attachments([str(f)]))
+
+    assert result == []
+    assert "I/O error" in caplog.text
+
+
 def test_validate_attachments_tilde_expansion():
     """Test that ~ paths are expanded correctly."""
     # We can't test actual home directory expansion reliably in tests,
