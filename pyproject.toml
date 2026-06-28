@@ -69,7 +69,6 @@ docs = [
     "mkdocs-section-index>=0.3",
     "pymdown-extensions>=10.0",
     "git-changelog",
-    "git-changelog",
 ]
 
 [project.urls]
@@ -96,7 +95,6 @@ dev-dependencies = [
     "ruff>=0.1.0",
     "pyyaml>=6.0",
     "python-dotenv>=1.2.0",
-    "types-requests",
     "types-requests",
 ]
 
@@ -183,7 +181,6 @@ addopts = [
 ]
 
 [tool.coverage.run]
-source = ["exmailer"]
 source = ["exmailer"]
 omit = ["*/tests/*", "*/__pycache__/*", "*/site-packages/*"]
 

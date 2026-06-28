@@ -1,19 +1,16 @@
 """Core ExchangeEmailer class with flexible template system."""
 
 import datetime
-import datetime
 import logging
 import ssl
 from collections.abc import Sequence
 from typing import Any, Literal
-from zoneinfo import ZoneInfo
 from zoneinfo import ZoneInfo
 
 from exchangelib import (
     DELEGATE,
     Account,
     Build,
-    CalendarItem,
     CalendarItem,
     Configuration,
     Credentials,
@@ -24,10 +21,6 @@ from exchangelib import (
     Version,
 )
 from exchangelib.errors import TransportError, UnauthorizedError
-from exchangelib.items import (
-    SEND_ONLY_TO_CHANGED,
-    SEND_TO_ALL_AND_SAVE_COPY,
-)
 from exchangelib.items import (
     SEND_ONLY_TO_CHANGED,
     SEND_TO_ALL_AND_SAVE_COPY,
@@ -79,9 +72,7 @@ class ExchangeEmailer:
         self,
         config_path: str | None = None,
         config: dict[str, Any] | None = None,
-        config: dict[str, Any] | None = None,
         verbose: bool = False,
-        log_file: str = "exchange_debug.log",
         log_file: str = "exchange_debug.log",
     ):
         """
@@ -95,7 +86,6 @@ class ExchangeEmailer:
         Examples:
             # Method 1: Programmatic config (recommended for scripts)
             ```python
-            ```python
             emailer = ExchangeEmailer(config={
                 "domain": "corp",
                 "username": "john.doe",
@@ -104,20 +94,15 @@ class ExchangeEmailer:
                 "email_domain": "corp.com"
             })
             ```
-            ```
 
             # Method 2: Config file
             ```python
-            ```python
             emailer = ExchangeEmailer(config_path="~/.config/exmailer/config.json")
-            ```
             ```
 
             # Method 3: Auto-discovery (looks in default locations)
             ```python
-            ```python
             emailer = ExchangeEmailer()
-            ```
             ```
         """
         self.verbose = verbose
@@ -128,7 +113,6 @@ class ExchangeEmailer:
             logging.basicConfig(
                 level=logging.DEBUG,
                 format="%(asctime)s %(levelname)s %(message)s",
-                filename=log_file,
                 filename=log_file,
             )
 
@@ -160,8 +144,6 @@ class ExchangeEmailer:
         try:
             full_username = f"{self.config['domain']}\\{self.config['username']}"
             credentials = Credentials(username=full_username, password=self.config["password"])
-            build_tuple = self.config.get("exchange_build") or (15, 1, 2248, 0)
-            version = Version(build=Build(*build_tuple))
             build_tuple = self.config.get("exchange_build") or (15, 1, 2248, 0)
             version = Version(build=Build(*build_tuple))
 
@@ -251,7 +233,6 @@ class ExchangeEmailer:
         cc_recipients: Sequence[str] | None = None,
         bcc_recipients: Sequence[str] | None = None,
         template: str | TemplateType | None = TemplateType.DEFAULT,
-        template: str | TemplateType | None = TemplateType.DEFAULT,
         template_vars: dict[str, Any] | None = None,
         importance: Literal["Low", "Normal", "High"] = "Normal",
     ) -> bool:
@@ -313,7 +294,6 @@ class ExchangeEmailer:
             # Get the appropriate template
             ## Apply template variables if provided
             formatted_body = self._render_body(body, template, template_vars)
-            formatted_body = self._render_body(body, template, template_vars)
 
             # Create message
             msg = Message(
@@ -321,12 +301,6 @@ class ExchangeEmailer:
                 subject=subject,
                 body=HTMLBody(formatted_body),
                 to_recipients=[Mailbox(email_address=email) for email in recipients],
-                cc_recipients=(
-                    [Mailbox(email_address=e) for e in cc_recipients] if cc_recipients else []
-                ),
-                bcc_recipients=(
-                    [Mailbox(email_address=e) for e in bcc_recipients] if bcc_recipients else []
-                ),
                 cc_recipients=(
                     [Mailbox(email_address=e) for e in cc_recipients] if cc_recipients else []
                 ),
@@ -342,8 +316,7 @@ class ExchangeEmailer:
                 for attachment in validated_attachments:
                     try:
                         with open(attachment["path"], "rb") as f:
-                            content = f.read()  # Single read; validate_attachments skips this
-                            content = f.read()  # Single read; validate_attachments skips this
+                            content = f.read()
 
                         file_attachment = FileAttachment(
                             name=attachment["name"],

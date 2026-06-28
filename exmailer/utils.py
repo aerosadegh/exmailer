@@ -6,7 +6,6 @@ from collections.abc import (
 )
 from pathlib import Path
 from typing import TypedDict
-from typing import TypedDict
 
 logger = logging.getLogger(__name__)
 
@@ -41,16 +40,11 @@ def get_content_type(filename: str) -> str:
     return content_type or "application/octet-stream"
 
 
-def validate_attachments(attachment_paths: Sequence[str] | None) -> Iterator[AttachmentData]:
-def validate_attachments(attachment_paths: Sequence[str] | None) -> Iterator[AttachmentData]:
+def validate_attachments(
+    attachment_paths: Sequence[str] | None,
+) -> Iterator[AttachmentData]:
     """
     Validate and prepare attachments for sending.
-
-    Args:
-        attachment_paths: A sequence (list, tuple) of file paths to attach.
-
-    Yields:
-        AttachmentData: A dictionary containing validated file metadata and binary content.
 
     Args:
         attachment_paths: A sequence (list, tuple) of file paths to attach.
@@ -60,7 +54,6 @@ def validate_attachments(attachment_paths: Sequence[str] | None) -> Iterator[Att
     """
     if not attachment_paths:
         return
-        return
 
     for path_str in attachment_paths:
         try:
@@ -69,17 +62,9 @@ def validate_attachments(attachment_paths: Sequence[str] | None) -> Iterator[Att
             # Reject directories or missing files
             if not path.is_file():
                 logger.warning(f"Skipping missing or invalid file: {path_str}")
-            # Reject directories or missing files
-            if not path.is_file():
-                logger.warning(f"Skipping missing or invalid file: {path_str}")
                 continue
 
             # Explicitly convert size to int to prevent mock leakage
-            size = int(path.stat().st_size)
-
-            if size == 0:
-                logger.warning(f"Skipping empty file: {path_str}")
-                continue
             size = int(path.stat().st_size)
 
             if size == 0:
@@ -103,10 +88,6 @@ def validate_attachments(attachment_paths: Sequence[str] | None) -> Iterator[Att
                 path=path,
             )
 
-        except PermissionError:
-            logger.error(f"Permission denied when accessing attachment: {path_str}")
-        except OSError as e:
-            logger.error(f"I/O error processing attachment {path_str}: {e}")
         except PermissionError:
             logger.error(f"Permission denied when accessing attachment: {path_str}")
         except OSError as e:
