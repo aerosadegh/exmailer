@@ -21,7 +21,7 @@
 - **CLI Interface**: Command-line tool for quick email sending
 - **Comprehensive Error Handling**: Custom exceptions for different failure scenarios
 - **Secure SSL/TLS**: Proper certificate verification and secure connections
-- **Logging Support**: Verbose mode for debugging and troubleshooting
+- **Logging Support**: Verbose mode for debugging and troubleshooting. Optionally write logs to a file with `ExchangeEmailer(verbose=True, log_file="custom.log")`
 
 ## Installation
 Requires Python 3.11+
@@ -34,7 +34,7 @@ pip install exmailer
 ### Using Python API
 
 ```python
-from exmailer import ExchangeEmailer
+from exmailer import ExchangeEmailer, TemplateType
 
 with ExchangeEmailer() as emailer:
     emailer.send_email(
@@ -42,7 +42,7 @@ with ExchangeEmailer() as emailer:
         body="لطفاً گزارش پیوست شده را بررسی نمایید.",
         recipients=["manager@company.com"],
         template=TemplateType.PERSIAN,  # Uses built-in RTL template
-        attachments="./report.pdf",
+        attachments=["./report.pdf"],
     )
 
     # Send a standard English/LTR email
@@ -50,10 +50,12 @@ with ExchangeEmailer() as emailer:
         subject="Weekly Report",
         body="Please find attached.",
         recipients=["colleague@company.com"],
-        template=TemplateType.DEFAULT
-        attachments="./report.pdf",
+        template=TemplateType.DEFAULT,
+        attachments=["./report.pdf"],
     )
 ```
+
+> **Note:** The default template is `TemplateType.DEFAULT` (English LTR).
 
 #### Custom Templates
 You can register custom HTML layouts for newsletters or alerts:
@@ -112,9 +114,16 @@ Or use a JSON config file `exmailer.json`:
   "server": "mail.corp.com",
   "email_domain": "corp.com",
   "auth_type": "NTLM",
-  "save_copy": true
+  "save_copy": true,
+  "exchange_build": [15, 1, 2248, 0],
+  "timezone": "UTC"
 }
 ```
+
+| Key | Required | Description |
+|---|---|---|
+| `exchange_build` | No | Target a specific Exchange server version as a 4-element list, e.g. `[15, 1, 2248, 0]`. Defaults to Exchange 2016 CU3. |
+| `timezone` | No | Timezone string (e.g. `"UTC"` or `"Asia/Tehran"`) used as a fallback when naive datetimes are passed to meeting methods. |
 
 ## Requirements
 
