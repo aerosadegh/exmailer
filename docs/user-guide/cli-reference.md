@@ -16,6 +16,7 @@ python -m exmailer [OPTIONS]
 |---|---|---|---|---|
 | `--config PATH` | string | No | — | Path to a JSON or YAML configuration file |
 | `--verbose` | flag | No | off | Enable verbose logging output |
+| `--log-file PATH` | string | No | `exchange_debug.log` | Destination for verbose debug output (only written when `--verbose` is set) |
 
 ---
 
@@ -24,11 +25,12 @@ python -m exmailer [OPTIONS]
 | Flag | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `--subject TEXT` | string | **Yes** | — | Email subject line |
-| `--body TEXT` | string | No | `""` | Email body. Prefix with `@` to read from a file (e.g. `@body.html`) |
+| `--body TEXT` | string | No | `""` | Email body. Prefix with `@` to read from a file (e.g. `@body.html`). A warning is printed if the body is empty. |
 | `--to EMAIL [EMAIL ...]` | list | **Yes** | — | One or more recipient addresses |
 | `--cc EMAIL [EMAIL ...]` | list | No | `[]` | CC recipients |
-| `--bcc EMAIL [EMAIL ...]` | list | No | `[]` | BCC recipients |
-| `--attachments FILE [FILE ...]` | list | No | `[]` | Files to attach to the email |
+| `--bcc EMAIL [EMAIL ...]` | list | No | `[]` | BCC recipients (email only — ignored with a warning when `--meeting` is used) |
+| `--attachments FILE [FILE ...]` | list | No | `[]` | Files to attach (email only — ignored with a warning when `--meeting` is used). Exits with an error if all specified files are missing. |
+| `--importance {Low,Normal,High}` | choice | No | `Normal` | Email priority level (ignored for meeting invites) |
 
 ---
 
@@ -38,9 +40,9 @@ python -m exmailer [OPTIONS]
 
 | Flag | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `--template {persian,english,minimal,plain,none}` | choice | No | `persian` | Built-in template. `persian` = RTL layout; `english` = LTR layout |
+| `--template {persian,english,minimal,plain,none}` | choice | No | `english` | Built-in template. `persian` = RTL layout; `english` = LTR layout |
 | `--template-file PATH` | string | No | — | Path to a custom HTML file. Must contain a `{body}` placeholder |
-| `--template-vars JSON` | JSON string | No | `{}` | Extra variables to interpolate into the template, e.g. `'{"date": "1404/11/18"}'` |
+| `--template-vars JSON` | JSON string | No | `{}` | Extra variables to interpolate into the body, e.g. `'{"date": "1404/11/18"}'`. Must be a JSON **object** (`{...}`); arrays or bare values are rejected. |
 
 ---
 
@@ -70,6 +72,18 @@ exmailer \
   --subject "Hello from ExMailer" \
   --body "This is a test email." \
   --to alice@example.com
+```
+
+### 1b. High-importance alert with custom log file
+
+```bash
+exmailer \
+  --subject "CRITICAL: Database unreachable" \
+  --body "The main DB is down. Investigating now." \
+  --to oncall@example.com \
+  --importance High \
+  --verbose \
+  --log-file /var/log/exmailer_debug.log
 ```
 
 ---
