@@ -1,5 +1,5 @@
 import logging
-import os
+import mimetypes
 from collections.abc import (
     Iterator,
     Sequence,
@@ -20,25 +20,24 @@ class AttachmentData(TypedDict):
     path: Path
 
 
+# Types that are absent from or inconsistently reported by the stdlib mimetypes
+# module across platforms (e.g. Windows registry vs. Linux /etc/mime.types).
+# These entries take priority over whatever the OS reports.
+_EXTRA_MIME_TYPES: dict[str, str] = {
+    ".msg": "application/vnd.ms-outlook",
+    ".rtf": "application/rtf",
+    ".zip": "application/zip",  # Windows registry: application/x-zip-compressed
+    ".csv": "text/csv",  # Windows registry: application/vnd.ms-excel
+}
+
+
 def get_content_type(filename: str) -> str:
-    """Map file extensions to MIME types for common corporate files."""
-    extensions = {
-        ".pdf": "application/pdf",
-        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        ".xls": "application/vnd.ms-excel",
-        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        ".doc": "application/msword",
-        ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        ".zip": "application/zip",
-        ".txt": "text/plain",
-        ".csv": "text/csv",
-        ".jpg": "image/jpeg",
-        ".png": "image/png",
-        ".rtf": "application/rtf",
-        ".msg": "application/vnd.ms-outlook",
-    }
-    ext = os.path.splitext(filename.lower())[1]
-    return extensions.get(ext, "application/octet-stream")
+    """Return the MIME type for a filename using the stdlib mimetypes module."""
+    ext = Path(filename).suffix.lower()
+    if ext in _EXTRA_MIME_TYPES:
+        return _EXTRA_MIME_TYPES[ext]
+    content_type, _ = mimetypes.guess_type(filename)
+    return content_type or "application/octet-stream"
 
 
 def validate_attachments(attachment_paths: Sequence[str] | None) -> Iterator[AttachmentData]:
@@ -79,12 +78,9 @@ def validate_attachments(attachment_paths: Sequence[str] | None) -> Iterator[Att
 
             content_type = get_content_type(path.name)
 
-            with open(path, "rb") as f:
-                content = f.read()
-
             yield AttachmentData(
                 name=path.name,
-                content=content,
+                content=b"",  # Content is read once by the caller to avoid double I/O
                 content_type=content_type,
                 size=size,
                 path=path,

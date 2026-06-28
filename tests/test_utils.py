@@ -18,7 +18,12 @@ def test_mime_type_detection():
         == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
     assert get_content_type("archive.zip") == "application/zip"
-    assert get_content_type("script.py") == "application/octet-stream"  # Unknown type fallback
+    assert get_content_type("notes.txt") == "text/plain"
+    assert get_content_type("data.csv") == "text/csv"
+    assert get_content_type("email.msg") == "application/vnd.ms-outlook"
+    assert (
+        get_content_type("file.unknownxyz") == "application/octet-stream"
+    )  # Unknown type fallback
 
 
 def test_validate_attachments_existing_files(tmp_path):

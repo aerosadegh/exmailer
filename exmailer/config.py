@@ -21,16 +21,15 @@ def load_config(
     """
     config: dict[str, Any] = {}
 
-    # Layer 3 & 2: Config Files
+    # Layer 1: Config file (explicit path)
     if config_path:
-        # Explicit file
         file_config = _load_config_file(config_path)
         config.update(_normalize_config(file_config))
         logger.info(f"✓ Loaded configuration from {config_path}")
 
     elif not config_dict:
-        # Implicit discovery
-        # MOVED HERE: Define paths dynamically to respect os.chdir()
+        # Layer 2: Config file (auto-discovery)
+        # Define paths dynamically to respect os.chdir()
         default_paths = [
             Path.cwd() / "exmailer.json",
             Path.cwd() / "exmailer.yaml",
@@ -50,12 +49,12 @@ def load_config(
                 logger.info(f"✓ Loaded configuration from discovered file: {path}")
                 break
 
-    # Layer 1: Programmatic config (Highest priority)
+    # Layer 3: Programmatic config dict (overrides file)
     if config_dict:
         config.update(_normalize_config(config_dict))
         logger.debug("✓ Loaded configuration from programmatic dict")
 
-    # Layer 4: Environment variables
+    # Layer 4: Environment variables (fill gaps only)
     if use_env:
         env_config = _load_env_config()
         for key, value in env_config.items():
@@ -158,6 +157,8 @@ def _normalize_config(config: dict[str, Any]) -> dict[str, Any]:
         "email_domain": ["email_domain", "domain_name", "smtp_domain"],
         "auth_type": ["auth_type", "authentication", "auth"],
         "save_copy": ["save_copy", "save", "save_sent"],
+        "exchange_build": ["exchange_build", "build"],
+        "timezone": ["timezone", "tz"],
     }
 
     for std_key, aliases in key_mapping.items():

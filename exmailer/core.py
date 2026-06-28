@@ -71,8 +71,9 @@ class ExchangeEmailer:
     def __init__(
         self,
         config_path: str | None = None,
-        config: dict[str, Any] | None = None,  # NEW parameter
+        config: dict[str, Any] | None = None,
         verbose: bool = False,
+        log_file: str = "exchange_debug.log",
     ):
         """
         Initialize the Exchange emailer.
@@ -112,7 +113,7 @@ class ExchangeEmailer:
             logging.basicConfig(
                 level=logging.DEBUG,
                 format="%(asctime)s %(levelname)s %(message)s",
-                filename="exchange_debug.log",
+                filename=log_file,
             )
 
         self.account = self._connect_to_exchange()
@@ -143,7 +144,8 @@ class ExchangeEmailer:
         try:
             full_username = f"{self.config['domain']}\\{self.config['username']}"
             credentials = Credentials(username=full_username, password=self.config["password"])
-            version = Version(build=Build(15, 1, 2248, 0))
+            build_tuple = self.config.get("exchange_build") or (15, 1, 2248, 0)
+            version = Version(build=Build(*build_tuple))
 
             email_domain = self.config.get("email_domain")
             if email_domain is None:  # pragma: no cover
@@ -185,18 +187,34 @@ class ExchangeEmailer:
         except Exception as e:  # pragma: no cover
             raise ExchangeEmailConnectionError(f"Unexpected connection error: {e!s}") from e
 
+    # Safe marker used when injecting the body into a template.
+    # Must not appear in any template HTML or user content.
+    _BODY_PLACEHOLDER = "\x00__EXMAILER_BODY__\x00"
+
     def _render_body(
         self, body: str, template: str | TemplateType | None, template_vars: dict[str, Any] | None
     ) -> str:
-        """Helper method to share template rendering between Emails and Calendar Invites."""
+        """Render the email body, optionally wrapping it in an HTML template.
+
+        Template variables are substituted into the body first.  The body is
+        then injected into the template via a safe placeholder replacement so
+        that HTML/CSS braces inside the body cannot cause a KeyError.
+        """
         template_vars = template_vars or {}
-        template_vars["body"] = body.format(**template_vars)
+
+        # Substitute caller-provided variables into the body
+        if template_vars:
+            body = body.format(**template_vars)
 
         if template is None or template == TemplateType.PLAIN:
-            return body.format(**template_vars)
+            return body
 
         template_html = get_template(template)
-        return template_html.format(**template_vars)
+        # Step 1: Resolve CSS {{ }} escaping and place a safe marker for {body}
+        rendered = template_html.format(body=self._BODY_PLACEHOLDER)
+        # Step 2: Replace the marker with the actual body content.
+        # Using str.replace avoids any brace-related errors from HTML/CSS in the body.
+        return rendered.replace(self._BODY_PLACEHOLDER, body)
 
     def _ensure_timezone(self, dt: datetime.datetime) -> datetime.datetime:
         """Ensure the datetime is timezone aware to prevent Exchange Server rejection."""
@@ -214,7 +232,7 @@ class ExchangeEmailer:
         attachments: Sequence[str] | None = None,
         cc_recipients: Sequence[str] | None = None,
         bcc_recipients: Sequence[str] | None = None,
-        template: str | TemplateType | None = TemplateType.PERSIAN,
+        template: str | TemplateType | None = TemplateType.DEFAULT,
         template_vars: dict[str, Any] | None = None,
         importance: Literal["Low", "Normal", "High"] = "Normal",
     ) -> bool:
@@ -298,7 +316,7 @@ class ExchangeEmailer:
                 for attachment in validated_attachments:
                     try:
                         with open(attachment["path"], "rb") as f:
-                            content = f.read()
+                            content = f.read()  # Single read; validate_attachments skips this
 
                         file_attachment = FileAttachment(
                             name=attachment["name"],
@@ -347,7 +365,7 @@ class ExchangeEmailer:
         required_attendees: Sequence[str] | None = None,
         optional_attendees: Sequence[str] | None = None,
         location: str = "",
-        template: str | TemplateType | None = TemplateType.PERSIAN,
+        template: str | TemplateType | None = TemplateType.DEFAULT,
         template_vars: dict[str, Any] | None = None,
         is_response_requested: bool = True,
     ) -> str:
@@ -458,9 +476,7 @@ class ExchangeEmailer:
                 item.location = location
 
             if body is not None:
-                # If you have a template builder function, you can call it here.
-                # Otherwise, wrapping it in HTMLBody works perfectly for raw HTML.
-                item.body = HTMLBody(body)
+                item.body = HTMLBody(self._render_body(body, template, None))
 
             if required_attendees is not None:
                 item.required_attendees = required_attendees

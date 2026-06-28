@@ -17,7 +17,7 @@ class ExchangeEmailConnectionError(ExchangeEmailerError):
 
 
 class SendError(ExchangeEmailerError):
-    """Raised when connection to Exchange server fails."""
+    """Raised when sending an email or calendar item fails."""
 
     pass
 
