@@ -21,6 +21,10 @@ from exchangelib import (
     Version,
 )
 from exchangelib.errors import TransportError, UnauthorizedError
+from exchangelib.items import (
+    SEND_ONLY_TO_CHANGED,
+    SEND_TO_ALL_AND_SAVE_COPY,
+)
 from exchangelib.protocol import BaseProtocol
 from requests.adapters import HTTPAdapter
 from urllib3.poolmanager import PoolManager
@@ -67,8 +71,9 @@ class ExchangeEmailer:
     def __init__(
         self,
         config_path: str | None = None,
-        config: dict[str, Any] | None = None,  # NEW parameter
+        config: dict[str, Any] | None = None,
         verbose: bool = False,
+        log_file: str = "exchange_debug.log",
     ):
         """
         Initialize the Exchange emailer.
@@ -108,7 +113,7 @@ class ExchangeEmailer:
             logging.basicConfig(
                 level=logging.DEBUG,
                 format="%(asctime)s %(levelname)s %(message)s",
-                filename="exchange_debug.log",
+                filename=log_file,
             )
 
         self.account = self._connect_to_exchange()
@@ -139,7 +144,8 @@ class ExchangeEmailer:
         try:
             full_username = f"{self.config['domain']}\\{self.config['username']}"
             credentials = Credentials(username=full_username, password=self.config["password"])
-            version = Version(build=Build(15, 1, 2248, 0))
+            build_tuple = self.config.get("exchange_build") or (15, 1, 2248, 0)
+            version = Version(build=Build(*build_tuple))
 
             email_domain = self.config.get("email_domain")
             if email_domain is None:  # pragma: no cover
@@ -181,18 +187,34 @@ class ExchangeEmailer:
         except Exception as e:  # pragma: no cover
             raise ExchangeEmailConnectionError(f"Unexpected connection error: {e!s}") from e
 
+    # Safe marker used when injecting the body into a template.
+    # Must not appear in any template HTML or user content.
+    _BODY_PLACEHOLDER = "\x00__EXMAILER_BODY__\x00"
+
     def _render_body(
         self, body: str, template: str | TemplateType | None, template_vars: dict[str, Any] | None
     ) -> str:
-        """Helper method to share template rendering between Emails and Calendar Invites."""
+        """Render the email body, optionally wrapping it in an HTML template.
+
+        Template variables are substituted into the body first.  The body is
+        then injected into the template via a safe placeholder replacement so
+        that HTML/CSS braces inside the body cannot cause a KeyError.
+        """
         template_vars = template_vars or {}
-        template_vars["body"] = body.format(**template_vars)
+
+        # Substitute caller-provided variables into the body
+        if template_vars:
+            body = body.format(**template_vars)
 
         if template is None or template == TemplateType.PLAIN:
-            return body.format(**template_vars)
+            return body
 
         template_html = get_template(template)
-        return template_html.format(**template_vars)
+        # Step 1: Resolve CSS {{ }} escaping and place a safe marker for {body}
+        rendered = template_html.format(body=self._BODY_PLACEHOLDER)
+        # Step 2: Replace the marker with the actual body content.
+        # Using str.replace avoids any brace-related errors from HTML/CSS in the body.
+        return rendered.replace(self._BODY_PLACEHOLDER, body)
 
     def _ensure_timezone(self, dt: datetime.datetime) -> datetime.datetime:
         """Ensure the datetime is timezone aware to prevent Exchange Server rejection."""
@@ -210,7 +232,7 @@ class ExchangeEmailer:
         attachments: Sequence[str] | None = None,
         cc_recipients: Sequence[str] | None = None,
         bcc_recipients: Sequence[str] | None = None,
-        template: str | TemplateType | None = TemplateType.PERSIAN,
+        template: str | TemplateType | None = TemplateType.DEFAULT,
         template_vars: dict[str, Any] | None = None,
         importance: Literal["Low", "Normal", "High"] = "Normal",
     ) -> bool:
@@ -343,7 +365,7 @@ class ExchangeEmailer:
         required_attendees: Sequence[str] | None = None,
         optional_attendees: Sequence[str] | None = None,
         location: str = "",
-        template: str | TemplateType | None = TemplateType.PERSIAN,
+        template: str | TemplateType | None = TemplateType.DEFAULT,
         template_vars: dict[str, Any] | None = None,
         is_response_requested: bool = True,
     ) -> str:
@@ -402,12 +424,11 @@ class ExchangeEmailer:
         subject: str,
         start: datetime.datetime,
         end: datetime.datetime,
-        body: str = "",
-        required_attendees: Sequence[str] | None = None,
-        optional_attendees: Sequence[str] | None = None,
-        location: str = "",
-        template: str | TemplateType | None = TemplateType.PERSIAN,
-        template_vars: dict[str, Any] | None = None,
+        required_attendees: list[str] | None = None,
+        optional_attendees: list[str] | None = None,
+        body: str | None = None,
+        template: str | TemplateType | None = None,
+        location: str | None = None,
         is_response_requested: bool = True,
         send_only_to_changed: bool = False,
     ) -> bool:
@@ -436,7 +457,7 @@ class ExchangeEmailer:
             ValueError: If the start time is equal to or after the end time, or if subject is empty.
             SendError: If the meeting update fails during the network request to Exchange.
         """
-        # 1. Defensive Boundary Checks (Fail Fast)
+
         if not exchange_id or not exchange_id.strip():
             logger.warning("Update aborted: 'exchange_id' must be a non-empty string.")
             return False
@@ -448,37 +469,39 @@ class ExchangeEmailer:
             raise ValueError("Meeting start time must be strictly before the end time.")
 
         try:
-            # 2. State Retrieval
             item = self.account.calendar.get(id=exchange_id)
-            formatted_body = self._render_body(body, template, template_vars)
 
-            # 3. State Mutation
+            item.subject = subject
             item.start = self._ensure_timezone(start)
             item.end = self._ensure_timezone(end)
-            item.subject = subject
-            item.body = HTMLBody(formatted_body)
-            item.location = location
-            item.required_attendees = required_attendees or []
-            item.optional_attendees = optional_attendees or []
             item.is_response_requested = is_response_requested
 
-            # 4. Dispatch Strategy Resolution
-            dispatch_mode = (
-                "SendToChangedAndSaveCopy" if send_only_to_changed else "SendToAllAndSaveCopy"
-            )
+            if location is not None:
+                item.location = location
 
-            # 5. Commit and Transmit
-            item.save(send_meeting_invitations=dispatch_mode)
-            logger.info(f"✅ Meeting '{subject}' updated successfully. Mode: {dispatch_mode}")
+            if body is not None:
+                item.body = HTMLBody(self._render_body(body, template, None))
+
+            if required_attendees is not None:
+                item.required_attendees = required_attendees
+
+            if optional_attendees is not None:
+                item.optional_attendees = optional_attendees
+
+            # Clean, standardized flag resolution using your preferred argument
+            send_flag = SEND_ONLY_TO_CHANGED if send_only_to_changed else SEND_TO_ALL_AND_SAVE_COPY
+
+            item.save(send_meeting_invitations=send_flag)
+            logger.info(f"✅ Meeting '{subject}' updated successfully. Mode: {send_flag}")
             return True
 
         except ValueError:
-            # Re-raise explicit validation constraints so they aren't masked
             raise
         except Exception as error:
-            # Broad catch mapped to specific domain exception
-            logger.error(f"❌ Failed to update meeting {exchange_id}: {error!s}")
-            raise SendError(f"Failed to update meeting: {error!s}") from error
+            logger.error(
+                f"❌ Failed to update meeting invite {exchange_id}: {error!s}", exc_info=True
+            )
+            raise SendError(f"Failed to update meeting invite {exchange_id}: {error!s}") from error
 
     def cancel_meeting_invite(self, exchange_id: str) -> bool:
         """

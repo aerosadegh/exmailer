@@ -108,6 +108,12 @@ def test_register_template_without_placeholder_raises_error():
         register_custom_template("invalid", invalid_template)
 
 
+def test_get_template_invalid_type_raises_value_error():
+    """Test that get_template raises ValueError for a non-string, non-TemplateType argument (L286-287)."""
+    with pytest.raises(ValueError, match="Invalid template type"):
+        get_template(12345)  # type: ignore[arg-type]
+
+
 def test_get_unknown_template_raises_error():
     """Test that getting unknown template raises KeyError."""
     with pytest.raises(KeyError) as exc_info:

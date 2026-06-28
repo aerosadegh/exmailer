@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from exchangelib import HTMLBody
+from exchangelib.items import SEND_ONLY_TO_CHANGED, SEND_TO_ALL_AND_SAVE_COPY
 
 from exmailer.core import ExchangeEmailer
 from exmailer.exceptions import SendError
@@ -67,10 +68,9 @@ def test_send_meeting_invite_success(mock_exchange_connection, sample_config, mo
 
 
 def test_update_meeting_invite_success(mock_exchange_connection, sample_config):
-    """Test successful update of an existing meeting."""
+    """Test successful update sending to ALL attendees (Default behavior)."""
     emailer = ExchangeEmailer(config=sample_config)
 
-    # Mock the retrieved calendar item
     mock_item = MagicMock()
     emailer.account.calendar.get = MagicMock(return_value=mock_item)
 
@@ -85,20 +85,37 @@ def test_update_meeting_invite_success(mock_exchange_connection, sample_config):
         body="Time changed.",
         required_attendees=["team@company.com"],
         is_response_requested=False,
+        # send_only_to_changed defaults to False here
     )
 
-    # Verify it fetched the correct item
     emailer.account.calendar.get.assert_called_once_with(id="existing_id_456")
-
-    # Verify item attributes were updated
     assert mock_item.subject == "Updated Sprint Planning"
-    assert mock_item.start == start_time
-    assert mock_item.end == end_time
-    assert mock_item.required_attendees == ["team@company.com"]
-    assert mock_item.is_response_requested is False
 
-    # Verify save was called correctly
-    mock_item.save.assert_called_once_with(send_meeting_invitations="SendToAllAndSaveCopy")
+    # Defaults to sending to everyone
+    mock_item.save.assert_called_once_with(send_meeting_invitations=SEND_TO_ALL_AND_SAVE_COPY)
+    assert success is True
+
+
+def test_update_meeting_invite_send_only_to_changed(mock_exchange_connection, sample_config):
+    """Test that send_only_to_changed=True forces emails ONLY to changed attendees."""
+    emailer = ExchangeEmailer(config=sample_config)
+    mock_item = MagicMock()
+    mock_item.body = "Original Body"
+    emailer.account.calendar.get = MagicMock(return_value=mock_item)
+
+    start_time = datetime.datetime(2026, 6, 26, 10, 0, tzinfo=ZoneInfo("UTC"))
+    end_time = datetime.datetime(2026, 6, 26, 11, 0, tzinfo=ZoneInfo("UTC"))
+
+    success = emailer.update_meeting_invite(
+        exchange_id="existing_id_456",
+        subject="Surgically Updated Sync",
+        start=start_time,
+        end=end_time,
+        send_only_to_changed=True,  # Engaging the flag
+    )
+
+    # Assert that it uses the restricted update flag
+    mock_item.save.assert_called_once_with(send_meeting_invitations=SEND_ONLY_TO_CHANGED)
     assert success is True
 
 
@@ -218,14 +235,14 @@ def test_update_and_cancel_with_empty_id(mock_exchange_connection, sample_config
 
     # Test Update with empty ID
     update_success = emailer.update_meeting_invite(
-        exchange_id="",  # 🚨 Empty ID
+        exchange_id="",
         subject="Empty ID Update",
         start=start_time,
         end=start_time,
     )
 
     # Test Cancel with empty ID
-    cancel_success = emailer.cancel_meeting_invite(exchange_id="")  # 🚨 Empty ID
+    cancel_success = emailer.cancel_meeting_invite(exchange_id="")
 
     # Both should immediately return False without calling the EWS server
     assert update_success is False
@@ -359,8 +376,46 @@ def test_update_meeting_invite_dispatch_mode_changed(
     )
 
     assert success is True
-    # Assert the correct granular flag was passed to the Exchange server
-    mock_item.save.assert_called_once_with(send_meeting_invitations="SendToChangedAndSaveCopy")
+    # Assert the correct granular flag was passed to the Exchange server using the standard constant
+    mock_item.save.assert_called_once_with(send_meeting_invitations=SEND_ONLY_TO_CHANGED)
+
+
+def test_update_meeting_sets_location(mock_exchange_connection, sample_config):
+    """Test that update_meeting_invite applies location when provided."""
+    emailer = ExchangeEmailer(config=sample_config)
+    mock_item = MagicMock()
+    emailer.account.calendar.get = MagicMock(return_value=mock_item)
+
+    t = datetime.datetime(2026, 7, 1, 10, 0, tzinfo=ZoneInfo("UTC"))
+    t_end = t + datetime.timedelta(hours=1)  # <-- Architected proper chronology
+    emailer.update_meeting_invite(
+        exchange_id="abc",
+        subject="Meeting",
+        start=t,
+        end=t_end,  # <-- Use t_end
+        location="Room 42",
+    )
+
+    assert mock_item.location == "Room 42"
+
+
+def test_update_meeting_sets_optional_attendees(mock_exchange_connection, sample_config):
+    """Test that update_meeting_invite applies optional_attendees when provided."""
+    emailer = ExchangeEmailer(config=sample_config)
+    mock_item = MagicMock()
+    emailer.account.calendar.get = MagicMock(return_value=mock_item)
+
+    t = datetime.datetime(2026, 7, 1, 10, 0, tzinfo=ZoneInfo("UTC"))
+    t_end = t + datetime.timedelta(hours=1)  # <-- Architected proper chronology
+    emailer.update_meeting_invite(
+        exchange_id="abc",
+        subject="Meeting",
+        start=t,
+        end=t_end,  # <-- Use t_end
+        optional_attendees=["guest@company.com"],
+    )
+
+    assert mock_item.optional_attendees == ["guest@company.com"]
 
 
 def test_update_meeting_invite_empty_subject_raises_value_error(

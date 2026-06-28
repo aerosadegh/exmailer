@@ -3,7 +3,7 @@
 ExMailer provides multiple ways to configure your connection to a Microsoft Exchange server. Settings are applied with the following priority (highest to lowest):
 
 1. **Programmatic configuration** (dictionary passed directly to `ExchangeEmailer`)
-2. **Explicit configuration file** (path provided via `config_file` parameter)
+2. **Explicit configuration file** (path provided via `config_path` parameter)
 3. **Auto‑discovered configuration files** (searched in predefined locations)
 4. **Environment variables**
 
@@ -11,15 +11,17 @@ All configuration methods expect the same set of parameters (see table below).
 
 ## Configuration Parameters
 
-| Parameter      | Type    | Required | Default  | Description |
-|----------------|---------|----------|----------|-------------|
-| `domain`       | string  | Yes      | –        | Active Directory domain (e.g., `CORP`, `your-domain`) |
-| `username`     | string  | Yes      | –        | User account name (without domain, e.g., `john.doe`) |
-| `password`     | string  | Yes      | –        | Account password |
-| `server`       | string  | Yes      | –        | Exchange server hostname or IP |
-| `email_domain` | string  | Yes      | –        | Domain part of the email address (e.g., `company.com`) |
-| `auth_type`    | string  | No       | `NTLM`   | Authentication method: `NTLM` or `BASIC` |
-| `save_copy`    | boolean | No       | `false`  | Whether to save a copy of sent emails in the Sent Items folder |
+| Parameter         | Type       | Required | Default          | Description |
+|-------------------|------------|----------|------------------|-------------|
+| `domain`          | string     | Yes      | –                | Active Directory domain (e.g., `CORP`, `your-domain`) |
+| `username`        | string     | Yes      | –                | User account name (without domain, e.g., `john.doe`) |
+| `password`        | string     | Yes      | –                | Account password |
+| `server`          | string     | Yes      | –                | Exchange server hostname or IP |
+| `email_domain`    | string     | Yes      | –                | Domain part of the email address (e.g., `company.com`) |
+| `auth_type`       | string     | No       | `NTLM`           | Authentication method: `NTLM` or `BASIC` |
+| `save_copy`       | boolean    | No       | `true`           | Whether to save a copy of sent emails in the Sent Items folder |
+| `exchange_build`  | list[int]  | No       | `[15,1,2248,0]`  | Exchange server build version tuple, e.g. `[15, 1, 2248, 0]` for Exchange 2016 CU3 |
+| `timezone`        | string     | No       | `"UTC"`          | Fallback timezone (IANA name) for naive datetimes passed to meeting methods |
 
 > **Note on username format**
 > The full user identifier used internally is `{domain}\{username}@{email_domain}`.
@@ -57,10 +59,10 @@ You can store settings in a JSON or YAML file. Two approaches are supported:
 
 ### A. Explicit File Path (Medium Priority)
 
-Pass the file path using the `config_file` parameter:
+Pass the file path using the `config_path` parameter:
 
 ```python
-emailer = ExchangeEmailer(config_file="/path/to/exmailer.json")
+emailer = ExchangeEmailer(config_path="/path/to/exmailer.json")
 ```
 
 ### B. Auto‑discovered Files (Lower Priority)
@@ -86,7 +88,9 @@ If no explicit path is given, ExMailer looks for configuration files in the foll
   "password": "your-password",
   "server": "mail.company.com",
   "email_domain": "company.com",
-  "save_copy": true
+  "save_copy": true,
+  "exchange_build": [15, 1, 2248, 0],
+  "timezone": "UTC"
 }
 ```
 
@@ -99,6 +103,9 @@ password: your-password
 server: mail.company.com
 email_domain: company.com
 save_copy: true
+# optional:
+exchange_build: [15, 1, 2248, 0]
+timezone: UTC
 ```
 
 > YAML does not allow trailing commas – the example above is correct.
@@ -116,7 +123,7 @@ EXCHANGE_PASS="your-password"
 EXCHANGE_SERVER="mail.company.com"
 EXCHANGE_EMAIL_DOMAIN="company.com"
 EXCHANGE_AUTH_TYPE="NTLM"      # optional, defaults to NTLM
-EXCHANGE_SAVE_COPY="true"      # optional, defaults to false
+EXCHANGE_SAVE_COPY="true"      # optional, defaults to true
 ```
 
 Boolean values accept `true`/`false`, `yes`/`no`, `1`/`0` (case‑insensitive).
@@ -130,7 +137,7 @@ Boolean values accept `true`/`false`, `yes`/`no`, `1`/`0` (case‑insensitive).
 | Priority | Method                  | How to Use                                                                 |
 |----------|-------------------------|----------------------------------------------------------------------------|
 | 1        | Programmatic dictionary | `ExchangeEmailer(config={...})`                                            |
-| 2        | Explicit file           | `ExchangeEmailer(config_file="path/to/file")`                              |
+| 2        | Explicit file           | `ExchangeEmailer(config_path="path/to/file")`                              |
 | 3        | Auto‑discovered file    | Place a JSON/YAML file in one of the predefined locations                  |
 | 4        | Environment variables   | Set `EXCHANGE_*` variables in your environment                             |
 

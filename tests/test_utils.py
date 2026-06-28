@@ -18,7 +18,12 @@ def test_mime_type_detection():
         == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
     assert get_content_type("archive.zip") == "application/zip"
-    assert get_content_type("script.py") == "application/octet-stream"  # Unknown type fallback
+    assert get_content_type("notes.txt") == "text/plain"
+    assert get_content_type("data.csv") == "text/csv"
+    assert get_content_type("email.msg") == "application/vnd.ms-outlook"
+    assert (
+        get_content_type("file.unknownxyz") == "application/octet-stream"
+    )  # Unknown type fallback
 
 
 def test_validate_attachments_existing_files(tmp_path):
@@ -87,6 +92,43 @@ def test_validate_attachments_large_file_warning(tmp_path, caplog):
     assert len(attachments) == 1
     assert "26.0MB" in caplog.text
     assert "exceeds 25.0MB limit".lower() in caplog.text.lower()
+
+
+def test_validate_attachments_permission_error(tmp_path, caplog):
+    """Test that a PermissionError on stat() is caught and logged (L91-92)."""
+    from pathlib import Path
+    from unittest.mock import patch
+
+    f = tmp_path / "protected.pdf"
+    f.write_bytes(b"content")
+
+    with (
+        patch.object(Path, "is_file", return_value=True),
+        patch.object(Path, "stat", side_effect=PermissionError("permission denied")),
+    ):
+        result = list(validate_attachments([str(f)]))
+
+    assert result == []
+    assert "Permission denied" in caplog.text
+
+
+def test_validate_attachments_os_error(tmp_path, caplog):
+    """Test that a generic OSError on stat() is caught and logged (L93-94)."""
+    from pathlib import Path
+    from unittest.mock import patch
+
+    f = tmp_path / "broken.pdf"
+    f.write_bytes(b"content")
+
+    # OSError (not a PermissionError subclass) triggers the second except branch
+    with (
+        patch.object(Path, "is_file", return_value=True),
+        patch.object(Path, "stat", side_effect=OSError("disk read error")),
+    ):
+        result = list(validate_attachments([str(f)]))
+
+    assert result == []
+    assert "I/O error" in caplog.text
 
 
 def test_validate_attachments_tilde_expansion():

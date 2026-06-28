@@ -5,7 +5,12 @@ from .exceptions import (
     ConfigurationError,
     ExchangeEmailConnectionError,
 )
-from .templates import get_default_template, get_persian_template, register_custom_template
+from .templates import (
+    TemplateType,
+    get_default_template,
+    get_persian_template,
+    register_custom_template,
+)
 
 try:
     from importlib.metadata import version
@@ -17,6 +22,7 @@ except Exception:  # pragma: no cover
 __author__ = "Sadegh Yazdani"
 __all__ = [
     "ExchangeEmailer",
+    "TemplateType",
     "get_default_template",
     "get_persian_template",
     "register_custom_template",
